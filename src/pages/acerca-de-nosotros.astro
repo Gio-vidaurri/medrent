@@ -6,16 +6,50 @@ import { METRICS } from '@lib/site';
 const metrics = METRICS;
 import BreadcrumbSchema from '@components/seo/BreadcrumbSchema.astro';
 import Breadcrumb from '@components/navigation/Breadcrumb.astro';
+
+const baseUrl = Astro.site ? new URL(Astro.site).origin : "https://www.medrent.mx";
+const canonicalUrl = new URL(Astro.url.pathname, Astro.site).toString();
+const breadcrumbId = `${canonicalUrl}#breadcrumb`;
+const logoUrl = `${baseUrl}/favicon-512.png`;
 ---
 
-<Layout title="Med Rent - Acerca de nosotros">
+<Layout
+  title="Acerca de MedRent | Distribución de equipo médico en México"
+  description="Conoce MedRent y cómo acercamos tecnología médica con soporte y capacitación. Experiencia en distribución y acompañamiento a especialistas."
+  keywords="MedRent; equipo médico; distribución; soporte biomédico; capacitación"
+  ogImage={logoUrl}
+>
     <Fragment slot="head">
         <BreadcrumbSchema
         items={[
-            { name: 'Inicio', url: 'https://www.medrent.mx' },
-            { name: 'Acerca de nosotros', url: 'https://www.medrent.mx/acerca-de-nosotros' },
+            { name: 'Inicio', url: `${baseUrl}/` },
+            { name: 'Acerca de nosotros', url: `${baseUrl}/acerca-de-nosotros` },
         ]}
+        id={breadcrumbId}
         />
+        <script type="application/ld+json" set:html={
+          JSON.stringify({
+            "@context": "https://schema.org",
+            "@graph": [
+              {
+                "@type": ["WebPage", "AboutPage"],
+                "@id": `${canonicalUrl}#webpage`,
+                "url": canonicalUrl,
+                "name": "Acerca de MedRent | Distribución de equipo médico en México",
+                "description":
+                  "Conoce MedRent y cómo acercamos tecnología médica con soporte y capacitación. Experiencia en distribución y acompañamiento a especialistas.",
+                "isPartOf": { "@id": `${baseUrl}/#website` },
+                "about": { "@id": `${baseUrl}/#organization` },
+                "inLanguage": "es-MX",
+                "breadcrumb": { "@id": breadcrumbId },
+                "primaryImageOfPage": {
+                  "@type": "ImageObject",
+                  "url": logoUrl,
+                },
+              },
+            ],
+          })
+        }></script>
     </Fragment>
 
     <div class="absolute w-full z-2">
@@ -31,10 +65,10 @@ import Breadcrumb from '@components/navigation/Breadcrumb.astro';
     <section aria-labelledby="about-hero-title" class="max-w-[1280px] w-full flex flex-col justify-start bg-[#000] min-h-[350px] mx-auto" style="border-radius:0 0 24px 24px;"> 
         <div class="w-full flex flex-col gap-4 py-[32px] px-4 mt-9 sm:px-[16px] md:px-[135px] md:py-[32px] sm:py-[32px] sm:px-[24px] m-auto"> 
             <div class="text-left flex flex-col gap-4">
-                <h2 class="text-[var(--color-accent)] font-bold text-[14px] md:text-[14px] uppercase mt-8"> LÍDERES EN TECNOLOGÍA MÉDICA</h2>
-                <h1 class=" text-[24px] font-bold font-bold text-[var(--color-white)] tracking-tight">
+                <h1 class="text-[var(--color-accent)] font-bold text-[14px] md:text-[14px] uppercase mt-8">LÍDERES EN TECNOLOGÍA MÉDICA</h1>
+                <h2 class="text-[24px] font-bold text-[var(--color-white)] tracking-tight">
                     DISTRIBUIMOS LAS MEJORES MARCAS DE EQUIPO MÉDICO
-                </h1>
+                </h2>
                 <p class="text-[var(--color-gray)] text-base tracking-[0.5px] ">Contamos el respaldo de más de 50 años de experiencia en el mercado de distribución de equipo médico.</p>
             </div>
             <a
@@ -207,24 +241,28 @@ import Breadcrumb from '@components/navigation/Breadcrumb.astro';
     </section>
     <script type="module">
         const slider = document.querySelector('#MetricsSlider');
-
-        if (slider) {
-            new Glide(slider, {
-            type: 'carousel',
-                perView: 5,
-                gap: 24,
-                autoplay: 2000,
-                hoverpause: true,
-                rewind: false,
-                breakpoints: {
-                1024: {
-                    perView: 3
-                },
-                640: {
-                    perView: 1
-                }
-                }
-            }).mount();
+        if (!slider) {
+            // noop
+        } else {
+            (async () => {
+                const { default: Glide } = await import('@glidejs/glide');
+                new Glide(slider, {
+                    type: 'carousel',
+                    perView: 5,
+                    gap: 24,
+                    autoplay: 2000,
+                    hoverpause: true,
+                    rewind: false,
+                    breakpoints: {
+                        1024: {
+                            perView: 3
+                        },
+                        640: {
+                            perView: 1
+                        }
+                    }
+                }).mount();
+            })().catch(() => {});
         }
     </script>
 
