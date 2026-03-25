@@ -1,0 +1,165 @@
+---
+/**
+ * Card horizontal de evento: misma base visual que ProductCard (borde, sombra, alturas de media, padding).
+ */
+import ImageResponsive from "@components/media/ImageResponsive.astro";
+
+export interface EventCardEvent {
+  title?: string;
+  subtitle?: string | null;
+  eventType?: string | null;
+  image?: { url?: string; alternativeText?: string | null; width?: number; height?: number; formats?: Record<string, { url?: string; width?: number }> } | null;
+  locationLabel?: string | null;
+}
+
+interface Props {
+  evento: EventCardEvent;
+  fechaTexto: string;
+  mapsUrl: string;
+  popupDateLabel: string;
+  popupTimeLabel: string;
+}
+
+const { evento, fechaTexto, mapsUrl, popupDateLabel, popupTimeLabel } = Astro.props;
+
+const imageFallback = "/images/Productos/default.webp";
+---
+
+<style>
+  .eventCard:hover {
+    box-shadow:
+      7px 11px 13px 0 rgba(33, 46, 56, 0.09),
+      2px 3px 7px 0 rgba(33, 46, 56, 0.1);
+  }
+</style>
+
+<article
+  class="eventCard group/card flex h-full flex-col overflow-hidden rounded-[16px] border border-[var(--color-gray)] bg-white transition-all duration-300 hover:border-[var(--color-primary)] hover:shadow-md md:flex-row md:items-stretch"
+>
+  <!-- Media: mismas alturas que ProductCard (220 / 240 / 260); en md crece con la fila -->
+  <div
+    class="relative h-[240px] w-full shrink-0 self-stretch overflow-hidden bg-white sm:h-[260px] md:h-auto md:min-h-[290px] md:w-1/2 md:max-w-[50%]"
+  >
+    <ImageResponsive
+      image={evento.image ?? undefined}
+      src={evento.image?.url ? undefined : imageFallback}
+      alt={evento.title ?? "Evento"}
+      omitDimensions={true}
+      class="absolute inset-0 h-full w-full object-cover object-center transition-transform duration-700 group-hover/card:scale-103"
+      sizes="(min-width: 1024px) 30vw, 100vw"
+      loading="lazy"
+      decoding="async"
+    />
+  </div>
+
+  <div
+    class="relative flex min-h-0 min-w-0 flex-1 flex-col items-start justify-center self-stretch bg-white/95 p-6 text-[#171D1C] backdrop-blur-[6px] transition-colors duration-300 group-hover/card:bg-[var(--color-secondary-light)] md:w-1/2"
+  >
+    <div class="relative z-10 flex min-h-0 w-full flex-1 flex-col justify-center gap-2 self-stretch">
+      {evento.eventType ? (
+        <p class="font-lato text-[12px] font-medium uppercase leading-[18px] tracking-[0.1px] text-[var(--color-primary)]">
+          {evento.eventType}
+        </p>
+      ) : null}
+
+      <h3
+        class="event-popup-trigger line-clamp-2 cursor-pointer font-lato text-[22px] font-bold leading-[28px] text-[#171D1C] transition-colors duration-300 group-hover/card:underline group-hover/card:decoration-[var(--color-primary)] group-hover/card:decoration-2 group-hover/card:underline-offset-4"
+        data-title={evento.title || ""}
+        data-description={evento.subtitle || ""}
+        data-img={evento.image?.url || imageFallback}
+        data-event-type={evento.eventType || ""}
+        data-date-label={popupDateLabel}
+        data-time-label={popupTimeLabel}
+        data-location-label={evento.locationLabel || ""}
+        data-location-url={mapsUrl}
+        role="button"
+        tabindex="0"
+      >
+        {evento.title}
+      </h3>
+
+      {evento.subtitle ? (
+        <p
+          class="event-popup-trigger line-clamp-3 cursor-pointer font-lato text-[16px] font-normal leading-6 tracking-[0.5px] text-[#3D4948]"
+          data-title={evento.title || ""}
+          data-description={evento.subtitle || ""}
+          data-img={evento.image?.url || imageFallback}
+          data-event-type={evento.eventType || ""}
+          data-date-label={popupDateLabel}
+          data-time-label={popupTimeLabel}
+          data-location-label={evento.locationLabel || ""}
+          data-location-url={mapsUrl}
+          role="button"
+          tabindex="0"
+        >
+          {evento.subtitle}
+        </p>
+      ) : null}
+
+      <div class="flex w-full flex-col gap-2">
+        <div class="flex items-start gap-2">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="24"
+            height="24"
+            viewBox="0 0 24 24"
+            fill="none"
+            class="mt-0.5 shrink-0"
+            aria-hidden="true"
+          >
+            <path
+              d="M12 21C11.656 21 11.336 20.823 11.153 20.532L7.19501 14.227C6.98901 13.9 6.79201 13.565 6.61601 13.222C5.34901 10.739 4.01501 7.08802 7.04801 4.05302C8.35801 2.74202 10.116 2.02002 12 2.02002C13.883 2.02002 15.642 2.74202 16.952 4.05202C20.002 7.10402 18.638 10.788 17.347 13.293C17.195 13.589 17.024 13.879 16.847 14.162L12.847 20.532C12.664 20.823 12.344 21 12 21ZM12 4.02002C10.65 4.02002 9.39401 4.53302 8.46201 5.46602C6.81101 7.11902 6.79101 9.16702 8.39701 12.312C8.54501 12.603 8.71401 12.886 8.88801 13.163L12 18.12L15.152 13.099C15.298 12.865 15.442 12.624 15.568 12.377C17.209 9.19502 17.199 7.12802 15.538 5.46602C14.605 4.53302 13.35 4.02002 12 4.02002Z"
+              fill="#3D4948"
+            />
+            <path
+              d="M12 12C10.346 12 9 10.654 9 9C9 7.346 10.346 6 12 6C13.654 6 15 7.346 15 9C15 10.654 13.654 12 12 12ZM12 8C11.449 8 11 8.449 11 9C11 9.551 11.449 10 12 10C12.551 10 13 9.551 13 9C13 8.449 12.551 8 12 8Z"
+              fill="#3D4948"
+            />
+            <path d="M17 19H7V21H17V19Z" fill="#3D4948" />
+          </svg>
+          <span class="min-w-0 font-lato text-[16px] font-normal leading-6 tracking-[0.5px] text-[#3D4948]">
+            <a href={mapsUrl} target="_blank" rel="noopener noreferrer" class="transition-colors hover:text-[var(--color-primary)] hover:underline">
+              {evento.locationLabel}
+            </a>
+          </span>
+        </div>
+
+        <div class="flex items-start gap-2">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" class="mt-0.5 shrink-0" aria-hidden="true">
+            <path d="M17 4V2H15V4H9V2H7V4H3V21H21V4H17ZM7 6V8H9V6H15V8H17V6H19V10H5V6H7ZM5 19V12H19V19H5Z" fill="#3D4948" />
+          </svg>
+          <span class="font-lato text-[16px] font-normal leading-6 tracking-[0.5px] text-[#3D4948]">{fechaTexto}</span>
+        </div>
+
+        {popupTimeLabel ? (
+          <div class="flex items-start gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" class="mt-0.5 shrink-0" aria-hidden="true">
+              <path
+                d="M12 2C10.0222 2 8.08879 2.58649 6.4443 3.6853C4.79981 4.78412 3.51809 6.3459 2.76121 8.17317C2.00433 10.0004 1.8063 12.0111 2.19215 13.9509C2.578 15.8907 3.53041 17.6725 4.92894 19.0711C6.32746 20.4696 8.10929 21.422 10.0491 21.8079C11.9889 22.1937 13.9996 21.9957 15.8268 21.2388C17.6541 20.4819 19.2159 19.2002 20.3147 17.5557C21.4135 15.9112 22 13.9778 22 12C21.9971 9.34874 20.9425 6.80691 19.0678 4.93219C17.1931 3.05746 14.6513 2.00295 12 2ZM12 20C10.4178 20 8.87104 19.5308 7.55544 18.6518C6.23985 17.7727 5.21447 16.5233 4.60897 15.0615C4.00347 13.5997 3.84504 11.9911 4.15372 10.4393C4.4624 8.88743 5.22433 7.46197 6.34315 6.34315C7.46197 5.22433 8.88743 4.4624 10.4393 4.15372C11.9911 3.84504 13.5997 4.00346 15.0615 4.60896C16.5233 5.21447 17.7727 6.23984 18.6518 7.55544C19.5308 8.87103 20 10.4177 20 12C19.9976 14.121 19.1539 16.1544 17.6542 17.6542C16.1544 19.1539 14.121 19.9976 12 20ZM14.0981 9.63379L13 10.2681V7C13 6.73478 12.8946 6.48043 12.7071 6.29289C12.5196 6.10536 12.2652 6 12 6C11.7348 6 11.4804 6.10536 11.2929 6.29289C11.1054 6.48043 11 6.73478 11 7V12C11 12.1755 11.0463 12.3479 11.1341 12.4999C11.2218 12.6519 11.3481 12.7782 11.5 12.8659C11.652 12.9537 11.8245 13 12 13C12.1755 13 12.348 12.9539 12.5 12.8662L15.0981 11.3662C15.212 11.3006 15.3117 11.2132 15.3918 11.109C15.4718 11.0048 15.5305 10.8858 15.5646 10.7589C15.5986 10.632 15.6073 10.4997 15.5902 10.3694C15.5731 10.2392 15.5305 10.1135 15.4648 9.99974C15.3991 9.88595 15.3117 9.78622 15.2074 9.70624C15.1032 9.62626 14.9842 9.56761 14.8573 9.53362C14.7304 9.49964 14.598 9.49099 14.4678 9.50818C14.3375 9.52537 14.2119 9.56805 14.0981 9.63379Z"
+                fill="#3D4948"
+              />
+            </svg>
+            <span class="font-lato text-[16px] font-normal leading-6 tracking-[0.5px] text-[#3D4948]">{popupTimeLabel}</span>
+          </div>
+        ) : null}
+      </div>
+
+      <div class="relative z-10 flex min-h-[40px] w-full items-center">
+      <button
+        type="button"
+        class="event-popup-trigger event-popup-btn inline-flex cursor-pointer items-center justify-center gap-2 rounded-[4px] border-none bg-[var(--Schemes-On-Primary-Fixed,#00201F)] px-4 py-2 font-lato text-[14px] font-bold leading-5 tracking-[0.25px] text-[var(--Schemes-On-Primary,#FFF)] transition-opacity hover:opacity-90"
+        data-title={evento.title || ""}
+        data-description={evento.subtitle || ""}
+        data-img={evento.image?.url || imageFallback}
+        data-event-type={evento.eventType || ""}
+        data-date-label={popupDateLabel}
+        data-time-label={popupTimeLabel}
+        data-location-label={evento.locationLabel || ""}
+        data-location-url={mapsUrl}
+      >
+        Regístrate
+      </button>
+      </div>
+    </div>
+  </div>
+</article>

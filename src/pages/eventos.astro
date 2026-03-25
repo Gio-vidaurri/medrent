@@ -10,9 +10,16 @@ import FormField from "@components/forms/FormField.astro";
 import CheckboxField from "@components/forms/CheckboxField.astro";
 import SubmitButton from "@components/forms/SubmitButton.astro";
 import ImageResponsive from "@components/media/ImageResponsive.astro";
+import EventCard from "@components/event/EventCard.astro";
+import EventPopupModal from "@components/event/EventPopupModal.astro";
 import SlideArticles from '@components/blog/slideArticles.astro';
+import { buildClassificationTagByArticleKeyMap } from "@lib/blog/classification";
 import BreadcrumbSchema from '@components/seo/BreadcrumbSchema.astro';
 import Breadcrumb from '@components/navigation/Breadcrumb.astro';
+import {
+  calendarDayAriaLabel,
+  calendarDayClasses,
+} from "@lib/eventos/calendarDayClasses";
 
 // import SliderPromociones from '../components/sliderPromociones.astro';
 // import Code from '@components/js.astro';
@@ -20,15 +27,27 @@ import Breadcrumb from '@components/navigation/Breadcrumb.astro';
 let data: any = {};
 let promotionsData: any[] = [];
 
+/** Copy por defecto del hero (Figma); CMS puede sustituir si el texto es propio. */
+const DEFAULT_HERO_TITLE = "Eventos médicos y de tecnología";
+const DEFAULT_HERO_DESCRIPTION =
+  "Conoce los congresos, talleres y presentaciones donde Medrent comparte innovación y equipos líderes en diagnóstico y tratamiento.";
+
 try {
-  const response = await strapiFetch("/events-page?populate[events][populate]=image&populate=heroImage");  
-  data = response.data;
+  const response = await strapiFetch(
+    "/events-page?populate[events][populate]=image&populate=heroImage",
+  );
+  const raw = response?.data;
+  if (raw?.attributes && typeof raw.attributes === "object") {
+    data = { id: raw.id, ...raw.attributes };
+  } else {
+    data = raw ?? {};
+  }
 } catch (error) {
   console.error('Error fetching events:', error);
   data = {
-    Eventos: [],
-    title: 'Eventos médicos',
-    description: 'Mantente actualizado con los últimos avances...'
+    events: [],
+    title: DEFAULT_HERO_TITLE,
+    description: DEFAULT_HERO_DESCRIPTION,
   };
 }
 
@@ -47,54 +66,396 @@ try {
 // }
 
 
-let articulos = null;
+/** Misma fuente y props que `index.astro` (módulo blog unificado). */
+let articulosRelacionados: any[] = [];
+let classificationTagByArticleKey = new Map<string, string>();
+
 try {
-    const relacionados = await strapiFetch('/blog-articles?sort=publishedAt:desc&populate[heroImage]=true&populate[writer][populate][avatar]=true');
-    
-    // La respuesta de strapiFetch probablemente ya viene como data
-    articulos = relacionados?.data || relacionados || [];
-    
-    //console.log('Artículos cargados:', articulos);
+  const clsRes = await strapiFetch(
+    "/article-classifications?pagination[pageSize]=100&sort=tag:asc&populate[articles]=true",
+  ).catch(() => ({ data: [] }));
+  classificationTagByArticleKey = buildClassificationTagByArticleKeyMap(
+    Array.isArray(clsRes?.data) ? clsRes.data : [],
+  );
+} catch {
+  classificationTagByArticleKey = new Map();
+}
+
+try {
+  const articulosAPI = await strapiFetch(
+    "/blog-articles?sort=publishedAt:desc&populate[heroImage]=true&populate[writer][populate][avatar]=true",
+  );
+  const raw = articulosAPI?.data ?? articulosAPI ?? [];
+  articulosRelacionados = Array.isArray(raw)
+    ? raw.filter((a: any) => a.isActive !== false)
+    : [];
 } catch (e) {
-    //console.error('Error cargando artículos:', e);
-    articulos = [];
+  console.error("Error blog-articles (eventos):", e);
+  try {
+    const fallback = await strapiFetch("/blog-articles?populate=*&sort=publishedAt:desc");
+    const raw = fallback?.data ?? [];
+    articulosRelacionados = Array.isArray(raw)
+      ? raw.filter((a: any) => a.isActive !== false)
+      : [];
+  } catch (e2) {
+    console.error("Error blog-articles fallback (eventos):", e2);
+    articulosRelacionados = [];
+  }
 }
 
 // Configurar dayjs en español
 dayjs.locale('es');
 
-// Obtener fecha actual
-const now = dayjs();
-const currentMonth = now.format('MMMM YYYY');
-const currentMonthTitleCase = currentMonth.charAt(0).toUpperCase() + currentMonth.slice(1).toLowerCase();
-
-// Obtener información del mes actual
-const startOfMonth = now.startOf('month');
-const endOfMonth = now.endOf('month');
-const startOfWeek = startOfMonth.startOf('week'); // Domingo
-const endOfWeek = endOfMonth.endOf('week'); // Sábado
-
-// Generar array de días para el calendario (6 semanas x 7 días = 42 días)
-const calendarDays = [];
-let currentDay = startOfWeek;
-
-for (let i = 0; i < 42; i++) {
-    const isCurrentMonth = currentDay.month() === now.month();
-    const dayNumber = currentDay.date();
-    const isToday = currentDay.isSame(now, 'day');
-    
-    calendarDays.push({
-        day: dayNumber,
-        isCurrentMonth,
-        isToday,
-        fullDate: currentDay.format('YYYY-MM-DD')
-    });
-    
-    currentDay = currentDay.add(1, 'day');
+/** Fecha larga para el modal (ej. "4 de febrero, 2026") */
+function formatPopupDateLabel(iso: string | undefined) {
+  if (!iso) return "";
+  return dayjs(iso).format("D [de] MMMM, YYYY");
 }
 
-// Días con eventos (puedes personalizar esto)
-const eventDays = [11, 14];
+/** Horario desde campos de Strapi (time o datetime) */
+function formatPopupTimeLabel(startTime: unknown, endTime: unknown) {
+  const parseOne = (t: unknown): string | null => {
+    if (t == null || t === "") return null;
+    const s = String(t).trim();
+    const hm = s.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?$/);
+    if (hm) {
+      const h = parseInt(hm[1], 10);
+      const m = parseInt(hm[2], 10);
+      const sec = parseInt(hm[3] ?? "0", 10);
+      return dayjs().hour(h).minute(m).second(sec).format("hh:mm A");
+    }
+    const d = dayjs(s);
+    return d.isValid() ? d.format("hh:mm A") : s;
+  };
+  const a = parseOne(startTime);
+  const b = parseOne(endTime);
+  if (a && b && a !== b) return `${a} – ${b}`;
+  return a || b || "";
+}
+
+function mesNombreFromKey(mesKey: string) {
+  const raw = dayjs(mesKey + "-01").format("MMMM YYYY");
+  return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+}
+
+/**
+ * Título del acordeón por mes.
+ * Si la agenda abarca varios años, incluye año ("Marzo 2026") para evitar colisiones.
+ */
+function mesTituloAcordion(mesKey: string, incluirAno: boolean) {
+  const raw = dayjs(mesKey + "-01").format(incluirAno ? "MMMM YYYY" : "MMMM");
+  return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+}
+
+function monthKeysInRangeInclusive(minKey: string, maxKey: string): string[] {
+  const keys: string[] = [];
+  let d = dayjs(minKey + "-01");
+  const end = dayjs(maxKey + "-01");
+  if (!d.isValid() || !end.isValid()) return keys;
+  while (d.isBefore(end, "month") || d.isSame(end, "month")) {
+    keys.push(d.format("YYYY-MM"));
+    d = d.add(1, "month");
+  }
+  return keys;
+}
+
+/** Fin del evento antes de hoy (local) → no se lista ni en calendario activo. */
+function isEventoPasado(evento: { startDate?: string; endDate?: string }) {
+  if (!evento?.startDate) return true;
+  const fin = dayjs(evento.endDate || evento.startDate).startOf("day");
+  return fin.isBefore(dayjs().startOf("day"));
+}
+
+/** Días del mes con al menos uno de los `eventos` (solo próximos al usar esa lista). */
+function buildDiasConEventosEnMes(eventos: any[], mesKey: string): number[] {
+  const set = new Set<number>();
+  for (const evento of eventos) {
+    if (!evento?.startDate) continue;
+    const fechaInicio = dayjs(evento.startDate);
+    const fechaFin = dayjs(evento.endDate || evento.startDate);
+    let diaActual = fechaInicio;
+    while (
+      diaActual.isBefore(fechaFin, "day") ||
+      diaActual.isSame(fechaFin, "day")
+    ) {
+      if (diaActual.format("YYYY-MM") === mesKey) {
+        set.add(diaActual.date());
+      }
+      diaActual = diaActual.add(1, "day");
+    }
+  }
+  return [...set].sort((a, b) => a - b);
+}
+
+/** Imagen Strapi (relación plana o data.attributes). */
+function normalizeStrapiMedia(img: any): any {
+  if (img == null || typeof img !== "object") return img;
+  if ("url" in img && img.url) return img;
+  const d = img.data;
+  if (d && typeof d === "object" && "attributes" in d && d.attributes)
+    return d.attributes;
+  if (Array.isArray(d) && d[0]?.attributes) return d[0].attributes;
+  return img;
+}
+
+/** Ítem de evento Strapi v4/v5 o ya plano desde la página singleton. */
+function normalizeEventEntry(entry: any): any {
+  if (entry == null || typeof entry !== "object") return entry;
+  const base =
+    "attributes" in entry &&
+    entry.attributes &&
+    typeof entry.attributes === "object"
+      ? {
+          id: entry.id,
+          documentId: (entry as { documentId?: string }).documentId,
+          ...entry.attributes,
+        }
+      : { ...entry };
+  if (base.image) base.image = normalizeStrapiMedia(base.image);
+  if (base.start_date && !base.startDate) base.startDate = base.start_date;
+  if (base.end_date && !base.endDate) base.endDate = base.end_date;
+  if (base.eventDate && !base.startDate) base.startDate = base.eventDate;
+  if (base.date && !base.startDate) base.startDate = base.date;
+  if (typeof base.startDate === "string") base.startDate = base.startDate.trim();
+  if (typeof base.endDate === "string") base.endDate = base.endDate.trim();
+  return base;
+}
+
+const rawHeroTitle =
+  typeof data.title === "string" ? data.title.trim() : "";
+const rawHeroDesc =
+  typeof data.description === "string" ? data.description.trim() : "";
+/** Valores legacy de Strapi / catch → copy de diseño. */
+const heroTitle =
+  !rawHeroTitle || rawHeroTitle === "Eventos médicos"
+    ? DEFAULT_HERO_TITLE
+    : data.title;
+const heroDescription =
+  !rawHeroDesc || rawHeroDesc.startsWith("Mantente actualizado")
+    ? DEFAULT_HERO_DESCRIPTION
+    : data.description;
+if (data.heroImage) {
+  data.heroImage = normalizeStrapiMedia(data.heroImage);
+}
+
+/** Relación Strapi: array plano o { data: entity[] }. */
+function unwrapRelationEntries(rel: unknown): any[] {
+  if (Array.isArray(rel)) return rel;
+  if (
+    rel &&
+    typeof rel === "object" &&
+    Array.isArray((rel as { data?: unknown }).data)
+  ) {
+    return (rel as { data: any[] }).data;
+  }
+  if (
+    rel &&
+    typeof rel === "object" &&
+    (rel as { data?: unknown }).data &&
+    typeof (rel as { data: unknown }).data === "object"
+  ) {
+    return [(rel as { data: unknown }).data];
+  }
+  return [];
+}
+
+function eventDedupeKey(e: any): string {
+  if (e?.id != null && e.id !== "") return `id:${e.id}`;
+  const doc = e?.documentId;
+  if (doc) return `doc:${doc}`;
+  const slug = e?.slug;
+  if (slug) return `slug:${slug}`;
+  const stamp =
+    e?.createdAt ??
+    e?.created_at ??
+    e?.publishedAt ??
+    e?.published_at ??
+    e?.updatedAt ??
+    "";
+  return `f:${e?.startDate ?? ""}:${String(e?.title ?? "")}:${String(stamp)}`;
+}
+
+const now = dayjs();
+
+/**
+ * Todas las páginas de una colección Strapi.
+ * Si `sort=startDate` no existe en el modelo, Strapi responde 400 y antes perdíamos la colección entera.
+ */
+async function strapiFetchCollectionAll(apiPath: string): Promise<any[]> {
+  const pageSize = 100;
+  const maxPages = 50;
+  const all: any[] = [];
+  let queryBase = `populate=image&sort=startDate:asc`;
+  try {
+    await strapiFetch(
+      `${apiPath}?${queryBase}&pagination[pageSize]=1&pagination[page]=1`,
+    );
+  } catch {
+    queryBase = "populate=image";
+  }
+  for (let page = 1; page <= maxPages; page += 1) {
+    const res = await strapiFetch(
+      `${apiPath}?${queryBase}&pagination[pageSize]=${pageSize}&pagination[page]=${page}`,
+    );
+    const batch = res?.data;
+    if (!Array.isArray(batch) || batch.length === 0) break;
+    all.push(...batch);
+    if (batch.length < pageSize) break;
+  }
+  return all;
+}
+
+function sortEventosPorFechaInicio(a: any, b: any): number {
+  return dayjs(a.startDate).valueOf() - dayjs(b.startDate).valueOf();
+}
+
+const eventosFromPage = unwrapRelationEntries(data?.events)
+  .map(normalizeEventEntry)
+  .filter((e: any) => e?.startDate);
+
+/** Unión: relación en `events-page` + todas las colecciones API (antes solo se usaba el 1.er endpoint con datos). */
+const eventosMerged = new Map<string, any>();
+for (const apiPath of ["/events", "/eventos"] as const) {
+  try {
+    const rows = await strapiFetchCollectionAll(apiPath);
+    for (const row of rows) {
+      const e = normalizeEventEntry(row);
+      if (!e?.startDate) continue;
+      const k = eventDedupeKey(e);
+      if (!eventosMerged.has(k)) eventosMerged.set(k, e);
+    }
+  } catch {
+    /* endpoint distinto o no disponible */
+  }
+}
+for (const e of eventosFromPage) {
+  const k = eventDedupeKey(e);
+  if (!eventosMerged.has(k)) eventosMerged.set(k, e);
+}
+let eventosListForLayout: any[] = [...eventosMerged.values()];
+
+const eventosPorMes: Record<
+  string,
+  { nombre: string; eventos: any[]; diasConEventos: Set<number> }
+> = {};
+
+eventosListForLayout.forEach((evento: any) => {
+  if (!evento?.startDate) return;
+  const fechaInicio = dayjs(evento.startDate);
+  const mesKey = fechaInicio.format("YYYY-MM");
+  const mesNombreRaw = fechaInicio.format("MMMM YYYY");
+  const mesNombre =
+    mesNombreRaw.charAt(0).toUpperCase() + mesNombreRaw.slice(1).toLowerCase();
+
+  if (!eventosPorMes[mesKey]) {
+    eventosPorMes[mesKey] = {
+      nombre: mesNombre,
+      eventos: [],
+      diasConEventos: new Set(),
+    };
+  }
+
+  const fechaFinEvento = dayjs(evento.endDate || evento.startDate);
+  let diaActual = fechaInicio;
+  while (
+    diaActual.isBefore(fechaFinEvento, "day") ||
+    diaActual.isSame(fechaFinEvento, "day")
+  ) {
+    if (diaActual.format("YYYY-MM") === mesKey) {
+      eventosPorMes[mesKey].diasConEventos.add(diaActual.date());
+    }
+    diaActual = diaActual.add(1, "day");
+  }
+
+  eventosPorMes[mesKey].eventos.push(evento);
+});
+
+const eventYears = eventosListForLayout
+  .map((e: any) => (e?.startDate ? dayjs(e.startDate).year() : null))
+  .filter((y: number | null): y is number => y != null);
+const minEventYear =
+  eventYears.length > 0 ? Math.min(...eventYears) : now.year();
+const maxEventYear =
+  eventYears.length > 0 ? Math.max(...eventYears) : now.year();
+/**
+ * Rango de años en la agenda: incluye el año actual y todos los años con eventos
+ * (antes solo se mostraba un año y los eventos en otro año desaparecían del listado).
+ */
+const agendaStartYear = Math.min(now.year(), minEventYear);
+const agendaEndYear = Math.max(now.year(), maxEventYear);
+const agendaMultiyear = agendaStartYear !== agendaEndYear;
+
+const mesesOrdenados = monthKeysInRangeInclusive(
+  `${agendaStartYear}-01`,
+  `${agendaEndYear}-12`,
+);
+
+const agendaYearLabel =
+  agendaStartYear === agendaEndYear
+    ? `${agendaEndYear}`
+    : `${agendaStartYear} – ${agendaEndYear}`;
+
+/** Label lateral: total de eventos en el rango de años de agenda (coincide con lo publicado en Strapi). */
+const totalEventosCount = eventosListForLayout.filter((e: any) => {
+  if (!e?.startDate) return false;
+  const y = dayjs(e.startDate).year();
+  return y >= agendaStartYear && y <= agendaEndYear;
+}).length;
+
+const firstMesKeyConProximos = mesesOrdenados.find((k) => {
+  const ev = eventosPorMes[k]?.eventos ?? [];
+  return ev.some((e: any) => !isEventoPasado(e));
+});
+
+/** Calendario SSR: mes del primer evento próximo, o mes actual si cae en el año de agenda. */
+const displayMonth = firstMesKeyConProximos
+  ? dayjs(firstMesKeyConProximos + "-01")
+  : now.year() >= agendaStartYear && now.year() <= agendaEndYear
+    ? now
+    : dayjs(`${agendaEndYear}-01-01`);
+
+const currentMonthTitleCase = (() => {
+  const raw = displayMonth.format("MMMM YYYY");
+  return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+})();
+
+const startOfMonthCal = displayMonth.startOf("month");
+const startOfWeek = startOfMonthCal.startOf("week");
+
+const calendarDays: {
+  day: number;
+  isCurrentMonth: boolean;
+  isToday: boolean;
+  fullDate: string;
+}[] = [];
+let currentDay = startOfWeek;
+for (let i = 0; i < 42; i++) {
+  const isCurrentMonth = currentDay.month() === displayMonth.month();
+  const dayNumber = currentDay.date();
+  const isToday = currentDay.isSame(now, "day");
+  calendarDays.push({
+    day: dayNumber,
+    isCurrentMonth,
+    isToday,
+    fullDate: currentDay.format("YYYY-MM-DD"),
+  });
+  currentDay = currentDay.add(1, "day");
+}
+
+const firstMesKeyCal = displayMonth.format("YYYY-MM");
+const eventosCalMesTodos = eventosPorMes[firstMesKeyCal]?.eventos ?? [];
+const eventDays = buildDiasConEventosEnMes(eventosCalMesTodos, firstMesKeyCal);
+
+const calMinMonth = `${agendaStartYear}-01`;
+const calMaxMonth = `${agendaEndYear}-12`;
+
+function chunkDays<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+const calendarWeeks = chunkDays(calendarDays, 7);
 
 const baseUrl = Astro.site ? new URL(Astro.site).origin : "https://www.medrent.mx";
 const canonicalUrl = new URL(Astro.url.pathname, Astro.site).toString();
@@ -139,8 +500,14 @@ const heroImageUrl = data?.heroImage?.url ?? logoUrl;
             />
             <script type="application/ld+json" set:html={
               (() => {
-                const eventosList = Array.isArray(data?.events) ? data.events : [];
-                const slice = eventosList.slice(0, 12);
+                const eventosList = eventosListForLayout;
+                const hoy = dayjs().startOf("day");
+                const upcoming = eventosList.filter((ev: any) => {
+                  if (!ev?.startDate) return false;
+                  const fin = dayjs(ev.endDate || ev.startDate).startOf("day");
+                  return !fin.isBefore(hoy);
+                });
+                const slice = upcoming.slice(0, 12);
                 const itemListElement = slice.map((evento, index) => {
                   const startDate = evento?.startDate;
                   const endDate = evento?.endDate;
@@ -242,11 +609,11 @@ const heroImageUrl = data?.heroImage?.url ?? logoUrl;
                 <div class="lg:pr-8 flex flex-col items-start justify-center gap-2" style="height: -webkit-fill-available;">
                     <p class="text-[14px] font-lato text-[var(--color-primary)] font-bold">EVENTOS</p>
                     <h1 class="text-[28px] font-bold text-[#261819] leading-tight">
-                       {data.title ? data.title : "Eventos médicos"}
+                       {heroTitle}
                     </h1>
                     
                     <p class="text-[16px] leading-[1.6] text-[#5A4043]">
-                        {data.description ? data.description : "Conoce los congresos, talleres y presentaciones donde Medrent comparte innovación y equipos líderes en diagnóstico y tratamiento."}
+                        {heroDescription}
                     </p>
                 </div>
                 
@@ -268,209 +635,246 @@ const heroImageUrl = data?.heroImage?.url ?? logoUrl;
         </div>
     </section>
     
-    <!-- Sección Calendario y Eventos -->
-    <section class="w-full bg-white py-6 md:py-8">
-        <div class="max-w-[1320px] mx-auto px-0 lg:px-4">
-            <div class="flex flex-col lg:flex-row gap-6">
+    <!-- Sección Calendario y Eventos (gutter 24px = gap-6; padding lateral 24px en lg) -->
+    <section class="w-full overflow-visible bg-white py-[24px] md:py-[24px]">
+        <div class="max-w-[1320px] mx-auto overflow-visible px-0 lg:px-6">
+            <div class="flex flex-col gap-[24px] overflow-visible lg:flex-row lg:items-stretch">
                 
-                <!-- Columna izquierda - Calendario (45%) -->
-                <div class="lg:w-[45%] px-4 md:p-6 lg:p-6">
-                    <div class="text-center font-sans" style="position: sticky; top: 120px;">
-                        <h2 class="font-lato text-[28px] text-[#261819] font-500 text-left mb-4">
-                            EVENTOS MedRent {now.year()}
+                <!-- Columna izquierda - Calendario compacto (altura = columna derecha para que sticky tenga recorrido) -->
+                <div class="w-full shrink-0 px-4 py-0 md:px-6 lg:w-[34%] lg:max-w-[380px] lg:px-0 lg:py-[24px]">
+                    <div
+                        class="sticky top-[120px] z-10 w-full text-center font-sans"
+                        data-lenis-prevent
+                    >
+                        <p
+                            class="mb-1 text-left font-lato text-[14px] font-medium uppercase leading-5 tracking-[0.1px] text-[var(--color-primary)]"
+                        >
+                            {totalEventosCount} EVENTOS
+                        </p>
+                        <h2 class="mb-3 text-left font-lato text-xl font-medium leading-8 text-[#261819] md:text-2xl md:leading-9">
+                            MedRent {agendaYearLabel}
                         </h2>
 
-                        <div class="bg-[var(--color-secondary-light)] rounded-2xl p-6" id="calendario-dinamico">
-                            <div class="flex justify-between items-center...">
-                                <span id="mes-actual" class="...">
+                        <div
+                            class="hidden rounded-xl bg-[var(--color-secondary-light)] p-[24px] lg:block"
+                            id="calendario-dinamico"
+                            data-initial-month={displayMonth.format("YYYY-MM")}
+                            data-min-month={calMinMonth}
+                            data-max-month={calMaxMonth}
+                            role="region"
+                            aria-label="Calendario de eventos"
+                        >
+                            <div class="flex items-center justify-between gap-2">
+                                <span
+                                    id="mes-actual"
+                                    class="font-lato text-base font-medium capitalize text-[#261819]"
+                                    aria-live="polite"
+                                >
                                     {currentMonthTitleCase}
                                 </span>
-                                
-                                <!-- Agrupa los botones aquí -->
-                                <div class="flex gap-8">
-                                    <button class="text-gray-400 color-[#6D7A78] hover:text-gray-600 hidden md:block">&lt;</button>
-                                    <button class="text-gray-400 color-[#6D7A78] hover:text-gray-600 hidden md:block">&gt;</button>
+
+                                <div class="flex shrink-0 gap-1">
+                                    <button
+                                        type="button"
+                                        id="cal-month-prev"
+                                        class="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[#6D7A78] transition hover:bg-white/60 hover:text-[#261819] disabled:cursor-not-allowed disabled:opacity-35"
+                                        aria-label="Mes anterior"
+                                    >
+                                        <span aria-hidden="true">&lt;</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        id="cal-month-next"
+                                        class="inline-flex h-9 w-9 items-center justify-center rounded-lg text-[#6D7A78] transition hover:bg-white/60 hover:text-[#261819] disabled:cursor-not-allowed disabled:opacity-35"
+                                        aria-label="Mes siguiente"
+                                    >
+                                        <span aria-hidden="true">&gt;</span>
+                                    </button>
                                 </div>
                             </div>
-                            <div id="calendario-dias" class="md:block hidden mt-4">
-                                <!-- Headers de días -->
-                                <div class="grid grid-cols-7 mb-3">
-                                    <div class="text-center text-sm text-gray-500 font-medium py-2">DOM</div>
-                                    <div class="text-center text-sm text-gray-500 font-medium py-2">LUN</div>
-                                    <div class="text-center text-sm text-gray-500 font-medium py-2">MAR</div>
-                                    <div class="text-center text-sm text-gray-500 font-medium py-2">MIÉ</div>
-                                    <div class="text-center text-sm text-gray-500 font-medium py-2">JUE</div>
-                                    <div class="text-center text-sm text-gray-500 font-medium py-2">VIE</div>
-                                    <div class="text-center text-sm text-gray-500 font-medium py-2">SÁB</div>
+                            <div id="calendario-dias" class="mt-3 block">
+                                <div class="mb-2 grid grid-cols-7" aria-hidden="true">
+                                    <div class="py-1 text-center text-[10px] font-medium text-gray-500 sm:text-xs">DOM</div>
+                                    <div class="py-1 text-center text-[10px] font-medium text-gray-500 sm:text-xs">LUN</div>
+                                    <div class="py-1 text-center text-[10px] font-medium text-gray-500 sm:text-xs">MAR</div>
+                                    <div class="py-1 text-center text-[10px] font-medium text-gray-500 sm:text-xs">MIÉ</div>
+                                    <div class="py-1 text-center text-[10px] font-medium text-gray-500 sm:text-xs">JUE</div>
+                                    <div class="py-1 text-center text-[10px] font-medium text-gray-500 sm:text-xs">VIE</div>
+                                    <div class="py-1 text-center text-[10px] font-medium text-gray-500 sm:text-xs">SÁB</div>
                                 </div>
-                                <!-- Días del calendario generados dinámicamente -->
-                                <div class="grid grid-cols-7 gap-1">
-                                    {calendarDays.map((dayInfo) => {
-                                        const hasEvent = dayInfo.isCurrentMonth && eventDays.includes(dayInfo.day);
-                                        return (
-                                            <div
-                                                class={`flex justify-center items-center w-10 h-10 rounded-full text-sm font-medium  mx-auto
-                                                    ${
-                                                    dayInfo.isToday
-                                                        ? "border-4 border-[#006764] bg-transparent text-[#006764]"
-                                                        : hasEvent
-                                                        ? "bg-[#006764] text-white"
-                                                        : dayInfo.isCurrentMonth 
-                                                        ? "text-gray-700 hover:bg-gray-100 cursor-pointer"
-                                                        : "text-gray-300"
-                                                    }`}
-                                            >
-                                                {dayInfo.day}
-                                            </div>
-                                        );
-                                    })}
+                                <div
+                                    id="calendario-dias-grid"
+                                    role="grid"
+                                    aria-labelledby="mes-actual"
+                                    class="flex flex-col gap-0.5"
+                                >
+                                    {calendarWeeks.map((week) => (
+                                        <div role="row" class="grid grid-cols-7 gap-0.5">
+                                            {week.map((dayInfo) => {
+                                                const hasEvent =
+                                                    dayInfo.isCurrentMonth &&
+                                                    eventDays.includes(dayInfo.day);
+                                                const cls = calendarDayClasses({
+                                                    isCurrentMonth: dayInfo.isCurrentMonth,
+                                                    isToday: dayInfo.isToday,
+                                                    fullDate: dayInfo.fullDate,
+                                                    day: dayInfo.day,
+                                                    diasConEventos: eventDays,
+                                                    selectedIso: null,
+                                                });
+                                                const label = calendarDayAriaLabel(
+                                                    dayInfo.fullDate,
+                                                    hasEvent,
+                                                    (d) => dayjs(d),
+                                                );
+                                                return (
+                                                    <button
+                                                        type="button"
+                                                        role="gridcell"
+                                                        class={cls}
+                                                        data-cal-date={dayInfo.fullDate}
+                                                        disabled={!dayInfo.isCurrentMonth}
+                                                        aria-label={label}
+                                                        aria-pressed="false"
+                                                        aria-current={dayInfo.isToday ? "date" : undefined}
+                                                    >
+                                                        {dayInfo.day}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    ))}
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
                 
-                <!-- Columna derecha - Cards de eventos (55%) -->
-                <div class="lg:w-[65%] px-4 md:p-6 lg:p-6">
-                    <div class="space-y-8">
-                        {(() => {
-                            // Verificar si hay eventos
-                            const eventosList = data?.events || [];
-                            
-                            if (eventosList.length === 0) {
-                                return <p class="text-center text-gray-500">No hay eventos próximos</p>;
-                            }
-                            
-                            // Agrupar eventos por mes
-                            const eventosPorMes: any = {};
-                            
-                            eventosList.forEach((evento) => {
-                                const fechaInicio = dayjs(evento.startDate);
-                                const mesKey = fechaInicio.format('YYYY-MM');
-                                const mesNombreRaw = fechaInicio.format('MMMM YYYY');
-                                const mesNombre = mesNombreRaw.charAt(0).toUpperCase() + mesNombreRaw.slice(1).toLowerCase();
-                                
-                                if (!eventosPorMes[mesKey]) {
-                                    eventosPorMes[mesKey] = {
-                                        nombre: mesNombre,
-                                        eventos: [],
-                                        diasConEventos: new Set()
-                                    };
-                                }
-                                
-                                // Agregar días del evento para el calendario
-                                const fechaInicioEvento = dayjs(evento.startDate);
-                                const fechaFinEvento = dayjs(evento.endDate);
-                                let diaActual = fechaInicioEvento;
-                                
-                                while (diaActual.isBefore(fechaFinEvento, 'day') || diaActual.isSame(fechaFinEvento, 'day')) {
-                                    if (diaActual.format('YYYY-MM') === mesKey) {
-                                        eventosPorMes[mesKey].diasConEventos.add(diaActual.date());
-                                    }
-                                    diaActual = diaActual.add(1, 'day');
-                                }
-                                
-                                eventosPorMes[mesKey].eventos.push(evento);
-                            });
-                            
-                            // Ordenar meses
-                            const mesesOrdenados = Object.keys(eventosPorMes).sort();
-                            
-                            return mesesOrdenados.map((mesKey) => {
-                                const mesData = eventosPorMes[mesKey];
-                                
-                                return (
-                                    <div class="space-y-6" data-month={mesKey} data-event-days={JSON.stringify([...mesData.diasConEventos])}>
-                                        {/* Título del mes */}
-                                        <h3 class="text-[#261819] font-lato text-[28px] font-light mb-4">
-                                            {mesData.nombre}
-                                        </h3>
-                                        
-                                        {/* Eventos del mes */}
-                                        <div class="space-y-6">
-                                            {mesData.eventos.map((evento) => {
-                                                // Formatear fechas
-                                                const fechaInicio = dayjs(evento.startDate);
-                                                const fechaFin = dayjs(evento.endDate);
-                                                
-                                                let fechaTexto = '';
-                                                if (fechaInicio.isSame(fechaFin, 'day')) {
-                                                    fechaTexto = fechaInicio.format('D [de] MMMM');
-                                                } else if (fechaInicio.isSame(fechaFin, 'month')) {
-                                                    fechaTexto = `Del ${fechaInicio.format('D')} al ${fechaFin.format('D [de] MMMM')}`;
-                                                } else {
-                                                    fechaTexto = `Del ${fechaInicio.format('D [de] MMMM')} al ${fechaFin.format('D [de] MMMM')}`;
-                                                }
-                                                
-                                                return (
-                                                    <article class="bg-white border border-[var(--color-accent)] rounded-[16px] hover:shadow-lg transition-shadow overflow-hidden hover:[background:var(--Schemes-Surface-Variant,#F3FFFD)]">
-                                                        <div class="flex flex-col md:flex-row">
-                                                            <div class="w-full md:w-1/2">
-                                                                <ImageResponsive
-                                                                  image={evento.image}
-                                                                  alt={evento.title}
-                                                                  class="w-full aspect-square object-cover"
-                                                                  sizes="(min-width: 1024px) 30vw, 100vw"
-                                                                  loading="lazy"
-                                                                  decoding="async"
-                                                                />
-                                                            </div>
-                                                            <div class="w-full md:w-1/2 p-6 flex flex-col bg-[#F5FAF9]">
-                                                                <div class="flex-1">
-                                                                    <p class="text-[var(--color-accent)] font-lato text-[14px] uppercase font-medium mb-2">
-                                                                        {evento.eventType}
-                                                                    </p>
-                                                                    <h3 class="text-[#261819] font-lato text-[20px] font-bold mb-1">
-                                                                        {evento.title}
-                                                                    </h3>
-                                                                    {/* <p class="text-[#261819] font-lato text-[20px] mb-4">
-                                                                        {evento.subtitle}
-                                                                    </p> */}
-                                                                    <div class="space-y-2">
-                                                                        <div class="flex items-center gap-2">
-                                                                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" class="flex-shrink-0">
-                                                                            <path d="M12 21C11.656 21 11.336 20.823 11.153 20.532L7.19501 14.227C6.98901 13.9 6.79201 13.565 6.61601 13.222C5.34901 10.739 4.01501 7.08802 7.04801 4.05302C8.35801 2.74202 10.116 2.02002 12 2.02002C13.883 2.02002 15.642 2.74202 16.952 4.05202C20.002 7.10402 18.638 10.788 17.347 13.293C17.195 13.589 17.024 13.879 16.847 14.162L12.847 20.532C12.664 20.823 12.344 21 12 21ZM12 4.02002C10.65 4.02002 9.39401 4.53302 8.46201 5.46602C6.81101 7.11902 6.79101 9.16702 8.39701 12.312C8.54501 12.603 8.71401 12.886 8.88801 13.163L12 18.12L15.152 13.099C15.298 12.865 15.442 12.624 15.568 12.377C17.209 9.19502 17.199 7.12802 15.538 5.46602C14.605 4.53302 13.35 4.02002 12 4.02002Z" fill="#3D4948"/>
-                                                                            <path d="M12 12C10.346 12 9 10.654 9 9C9 7.346 10.346 6 12 6C13.654 6 15 7.346 15 9C15 10.654 13.654 12 12 12ZM12 8C11.449 8 11 8.449 11 9C11 9.551 11.449 10 12 10C12.551 10 13 9.551 13 9C13 8.449 12.551 8 12 8Z" fill="#3D4948"/>
-                                                                            <path d="M17 19H7V21H17V19Z" fill="#3D4948"/>
-                                                                        </svg>
-                                                                        <span class="text-[#261819] text-[16px]">
-                                                                            <a href={evento.locationUrlMaps} target="_blank" class="hover:text-[var(--color-accent)] transition-colors">
-                                                                                {evento.locationLabel}
-                                                                            </a>
-                                                                        </span>
-                                                                    </div>
-                                                                        <div class="flex items-center gap-2">
-                                                                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none">
-                                                                                <path d="M17 4V2H15V4H9V2H7V4H3V21H21V4H17ZM7 6V8H9V6H15V8H17V6H19V10H5V6H7ZM5 19V12H19V19H5Z" fill="#3D4948"/>
-                                                                            </svg>
-                                                                            <span class="text-[#261819] text-[16px]">{fechaTexto}</span>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                                <div class="pt-4">
-                                                                    <button 
-                                                                        type="button"
-                                                                        class="event-popup-btn inline-flex items-center gap-2 text-[#006764] font-lato text-[14px] hover:opacity-80 transition-opacity bg-transparent border-none cursor-pointer"
-                                                                        data-title={evento.title || ''}
-                                                                        data-description={evento.subtitle || ''}
-                                                                        data-img={evento.image?.url || ''} 
-                                                                    >
-                                                                        Saber más
-                                                                       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="23" viewBox="0 0 24 23" fill="none">
-                                                                            <path d="M17.92 6.34417C17.8185 6.11 17.6243 5.92391 17.38 5.82667C17.2598 5.77756 17.1307 5.75151 17 5.75H7C6.73478 5.75 6.48043 5.85097 6.29289 6.03069C6.10536 6.21041 6 6.45417 6 6.70833C6 6.9625 6.10536 7.20625 6.29289 7.38598C6.48043 7.5657 6.73478 7.66667 7 7.66667H14.59L6.29 15.6112C6.19627 15.7003 6.12188 15.8063 6.07111 15.9231C6.02034 16.0399 5.9942 16.1652 5.9942 16.2917C5.9942 16.4182 6.02034 16.5434 6.07111 16.6602C6.12188 16.777 6.19627 16.883 6.29 16.9721C6.38296 17.0619 6.49356 17.1332 6.61542 17.1819C6.73728 17.2305 6.86799 17.2556 7 17.2556C7.13201 17.2556 7.26272 17.2305 7.38458 17.1819C7.50644 17.1332 7.61704 17.0619 7.71 16.9721L16 9.01792V16.2917C16 16.5458 16.1054 16.7896 16.2929 16.9693C16.4804 17.149 16.7348 17.25 17 17.25C17.2652 17.25 17.5196 17.149 17.7071 16.9693C17.8946 16.7896 18 16.5458 18 16.2917V6.70833C17.9984 6.5831 17.9712 6.45938 17.92 6.34417Z" fill="#006764"/>
-                                                                        </svg>
-                                                                    </button>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-                                                    </article>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
+                <!-- Columna derecha - Acordeón por mes (estado vacío Figma: padding 24px, gap icono–texto 16px) -->
+                <div class="min-w-0 flex-1 px-4 py-0 md:px-6 lg:px-0 lg:py-[24px]">
+                    <div class="flex flex-col">
+                            {mesesOrdenados.map((mesKey, mesIndex) => {
+                                const bucket = eventosPorMes[mesKey];
+                                const mesData = bucket ?? {
+                                    nombre: mesNombreFromKey(mesKey),
+                                    eventos: [],
+                                    diasConEventos: new Set(),
+                                };
+                                /** Todos los eventos del mes (Strapi); se listan aunque ya hayan pasado. */
+                                const eventosDelMes = [...mesData.eventos].sort(
+                                    sortEventosPorFechaInicio,
                                 );
-                            });
-                        })()}
+                                const diasArr = buildDiasConEventosEnMes(
+                                    eventosDelMes,
+                                    mesKey,
+                                );
+                                const tieneEventos = eventosDelMes.length > 0;
+                                const tieneProximos = eventosDelMes.some(
+                                    (e: any) => !isEventoPasado(e),
+                                );
+
+                                return (
+                                    <details
+                                        class="event-month-details"
+                                        data-month={mesKey}
+                                        data-event-days={JSON.stringify(diasArr)}
+                                        open={tieneProximos}
+                                    >
+                                        <summary
+                                            class="event-month-summary flex w-full cursor-pointer list-none items-center justify-between gap-4 border-b border-[#E8EEED] py-[24px] font-lato text-[#261819] [&::-webkit-details-marker]:hidden"
+                                            aria-label={`Eventos de ${mesNombreFromKey(mesKey)}`}
+                                        >
+                                            <span class="text-left text-xl font-medium leading-8 text-[#261819] md:text-2xl md:leading-9">
+                                                {mesTituloAcordion(mesKey, agendaMultiyear)}
+                                            </span>
+                                            <svg
+                                                class="event-month-chevron h-6 w-6 shrink-0 text-[#261819] transition-transform duration-200"
+                                                xmlns="http://www.w3.org/2000/svg"
+                                                fill="none"
+                                                viewBox="0 0 24 24"
+                                                stroke="currentColor"
+                                                strokeWidth="2"
+                                                aria-hidden="true"
+                                            >
+                                                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                                            </svg>
+                                        </summary>
+                                        <div class="pb-[24px] pt-6 md:pt-8">
+                                            {tieneEventos ? (
+                                                <div class="flex flex-col gap-6">
+                                                    {eventosDelMes.map((evento) => {
+                                                        const fechaInicio = dayjs(evento.startDate);
+                                                        const fechaFin = dayjs(
+                                                            evento.endDate ||
+                                                                evento.startDate,
+                                                        );
+                                                        const mapsUrl =
+                                                            (evento as { locationUrlMaps?: string }).locationUrlMaps ??
+                                                            (evento as { locationUriMaps?: string }).locationUriMaps ??
+                                                            "#";
+                                                        const popupDateLabel = formatPopupDateLabel(evento.startDate);
+                                                        const popupTimeLabel = formatPopupTimeLabel(
+                                                            (evento as { startTime?: string }).startTime,
+                                                            (evento as { endTime?: string }).endTime,
+                                                        );
+
+                                                        let fechaTexto = "";
+                                                        if (fechaInicio.isSame(fechaFin, "day")) {
+                                                            fechaTexto = fechaInicio.format("D [de] MMMM");
+                                                        } else if (fechaInicio.isSame(fechaFin, "month")) {
+                                                            fechaTexto = `Del ${fechaInicio.format("D")} al ${fechaFin.format("D [de] MMMM")}`;
+                                                        } else {
+                                                            fechaTexto = `Del ${fechaInicio.format("D [de] MMMM")} al ${fechaFin.format("D [de] MMMM")}`;
+                                                        }
+
+                                                        return (
+                                                            <EventCard
+                                                                evento={evento}
+                                                                fechaTexto={fechaTexto}
+                                                                mapsUrl={mapsUrl}
+                                                                popupDateLabel={popupDateLabel}
+                                                                popupTimeLabel={popupTimeLabel}
+                                                            />
+                                                        );
+                                                    })}
+                                                </div>
+                                            ) : (
+                                                <div
+                                                    class="flex h-[384px] w-full shrink-0 flex-col items-center justify-center gap-4 self-stretch rounded-[24px] bg-[#F5FAF9] p-6 text-center backdrop-blur-[6px]"
+                                                    role="status"
+                                                    aria-live="polite"
+                                                >
+                                                    <svg
+                                                        xmlns="http://www.w3.org/2000/svg"
+                                                        width="59"
+                                                        height="59"
+                                                        viewBox="0 0 59 59"
+                                                        fill="none"
+                                                        class="aspect-square h-[59px] w-[59px] shrink-0"
+                                                        aria-hidden="true"
+                                                    >
+                                                        <path
+                                                            d="M28.6643 17.2085H36.8751V19.6669C36.8751 20.3189 37.1341 20.9441 37.5952 21.4052C38.0562 21.8662 38.6815 22.1252 39.3335 22.1252C39.9855 22.1252 40.6108 21.8662 41.0718 21.4052C41.5328 20.9441 41.7918 20.3189 41.7918 19.6669V17.2085H44.2502C44.9022 17.2085 45.5275 17.4675 45.9885 17.9285C46.4495 18.3896 46.7085 19.0149 46.7085 19.6669V27.0419H43.4143C42.7623 27.0419 42.137 27.3009 41.676 27.7619C41.215 28.2229 40.956 28.8482 40.956 29.5002C40.956 30.1522 41.215 30.7775 41.676 31.2385C42.137 31.6996 42.7623 31.9586 43.4143 31.9586H46.7085V35.2528C46.7085 35.9047 46.9675 36.53 47.4285 36.9911C47.8896 37.4521 48.5149 37.7111 49.1669 37.7111C49.8189 37.7111 50.4441 37.4521 50.9052 36.9911C51.3662 36.53 51.6252 35.9047 51.6252 35.2528V19.6669C51.6252 17.7109 50.8482 15.835 49.4651 14.4519C48.082 13.0688 46.2061 12.2918 44.2502 12.2918H41.7918V9.83348C41.7918 9.18149 41.5328 8.5562 41.0718 8.09517C40.6108 7.63414 39.9855 7.37514 39.3335 7.37514C38.6815 7.37514 38.0562 7.63414 37.5952 8.09517C37.1341 8.5562 36.8751 9.18149 36.8751 9.83348V12.2918H28.6643C28.0123 12.2918 27.387 12.5508 26.926 13.0119C26.4649 13.4729 26.2059 14.0982 26.2059 14.7502C26.2059 15.4022 26.4649 16.0275 26.926 16.4885C27.387 16.9495 28.0123 17.2085 28.6643 17.2085ZM53.3706 49.8799L49.4373 45.9466L9.12044 5.62972C8.89123 5.4005 8.61912 5.21868 8.31963 5.09463C8.02015 4.97059 7.69917 4.90674 7.37502 4.90674C7.05086 4.90674 6.72988 4.97059 6.4304 5.09463C6.13092 5.21868 5.85881 5.4005 5.62959 5.62972C5.16668 6.09263 4.90662 6.72048 4.90662 7.37514C4.90662 8.0298 5.16668 8.65765 5.62959 9.12056L10.325 13.7914C9.4124 14.4759 8.67099 15.3627 8.1591 16.3822C7.64722 17.4017 7.37883 18.5261 7.37502 19.6669V44.2503C7.37502 46.2063 8.15203 48.0821 9.53511 49.4652C10.9182 50.8483 12.7941 51.6253 14.75 51.6253H44.2502C45.349 51.6188 46.4325 51.3668 47.4214 50.8878L49.8798 53.3462C50.1083 53.5766 50.3802 53.7595 50.6798 53.8843C50.9794 54.0091 51.3007 54.0733 51.6252 54.0733C51.9497 54.0733 52.2711 54.0091 52.5706 53.8843C52.8702 53.7595 53.1421 53.5766 53.3706 53.3462C53.8285 52.8856 54.0855 52.2625 54.0855 51.613C54.0855 50.9636 53.8285 50.3405 53.3706 49.8799ZM12.2917 19.6669C12.2969 19.1658 12.4551 18.6784 12.7451 18.2698C13.0351 17.8612 13.443 17.5509 13.9142 17.3806L23.5755 27.0419H12.2917V19.6669ZM14.75 46.7086C14.0981 46.7086 13.4728 46.4496 13.0117 45.9886C12.5507 45.5276 12.2917 44.9023 12.2917 44.2503V31.9586H28.4922L43.2422 46.7086H14.75Z"
+                                                            fill="#006764"
+                                                        />
+                                                    </svg>
+                                                    <p
+                                                        class="self-stretch text-center font-lato text-2xl font-bold leading-8 text-[var(--Schemes-On-Surface)]"
+                                                    >
+                                                        Este mes no cuenta con eventos programados
+                                                    </p>
+                                                    <p
+                                                        class="self-stretch text-center font-lato text-sm font-normal leading-5 tracking-[0.25px] text-[var(--Schemes-On-Surface)]"
+                                                    >
+                                                        Consulta otros meses para conocer nuestras próximas actividades
+                                                        académicas y clínicas.
+                                                    </p>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </details>
+                                );
+                            })}
                     </div>
                 </div>
             
@@ -482,121 +886,30 @@ const heroImageUrl = data?.heroImage?.url ?? logoUrl;
     <PromotionSlider promotionsData={promotionsData} />
 
 
+    <!-- Blog: mismo bloque que index.astro (sin defer-section: página larga + Glide; evita cards invisibles) -->
     <section class="max-w-7xl mx-auto py-8 sliderArticulosRelacionados px-4 md:px-6">
-        <span class="mb-2 uppercase text-[12px] font-bold leading-[20px] tracking-[0.1px] text-[var(--color-accent)]">BLOG</span>
-        <h3 class=" mb-6 font-normal text-[28px] text-[#212121]">Explora artículos y noticias sobre tecnología médica, innovación y cuidado especializado para mejorar la salud y el bienestar.</h3>
-        <SlideArticles articulos={articulos} />
+        <span class="mb-2 uppercase font-kallisto text-[12px] font-medium leading-[20px] tracking-[0.1px] text-[var(--color-accent)]">BLOG</span>
+        <h3 class="mb-6 font-lato medrent-headline-section">Explora artículos y noticias sobre tecnología médica, innovación y cuidado especializado para mejorar la salud y el bienestar.</h3>
+        <SlideArticles articulos={articulosRelacionados} tagByArticleKey={classificationTagByArticleKey} />
     </section>
-    
-</Layout>
-
-<!-- Definir datos del popup -->
-<!-- <script define:vars={{ 
-  popupData: {
-    titulo: data.PopUpTitulo || 'Eventos MedRent',
-    descripcion: data.PopUpDescripcion || 'Descubre nuestros eventos y accede a beneficios exclusivos.',
-    imagen: data.PopUpImagen?.url
-  }
-}}>
-  // Hacer los datos disponibles globalmente
-  window.popupData = popupData;
-</script> -->
-
-<!-- Popup de Evento -->
-<div id="event-popup-overlay" class="fixed inset-0 z-50 hidden">
-    <!-- Background with blur and gradient -->
-    <div 
-        id="event-blurred-background" 
-        class="absolute inset-0 transition-all duration-300"
-        style="background: linear-gradient(0deg, rgba(0, 0, 0, 0.50) 0%, rgba(0, 0, 0, 0.50) 100%); filter: blur(8px);"
-    >
-    </div>
-    
-    <!-- Popup Content -->
-    <div id="PopupContent" class="relative z-10 flex items-center justify-center min-h-screen p-4 h-[85%] md:h-[85%] lg:h-auto md:mt-12 overflow-y-auto">
-        <div class="bg-white rounded-lg shadow-xl max-w-4xl w-full overflow-auto relative h-[85%] md:h-[85%] lg:h-auto">
-                <!-- Botón cerrar en esquina superior derecha del popup -->
-                <button 
-                    id="close-event-popup"
-                    class="absolute top-4 right-4 text-white text-2xl leading-none bg-[#261819] border-none cursor-pointer z-10 px-2 py-1 rounded"
-                >
-                    ×
-                </button>
-                
-                <!-- Contenido del popup -->
-                <div class="flex flex-col lg:flex-row relative">
-                    <!-- Imagen izquierda que cubre toda la altura -->
-                    <div class="lg:w-1/2 relative">
-                        <img
-                            id="event-popup-image"
-                            src=""
-                            alt="Evento"
-                            class="w-full h-auto min-h-0 object-contain md:h-64 md:min-h-[500px] md:object-cover lg:h-full lg:min-h-[500px] lg:object-cover"
-                            loading="lazy"
-                            decoding="async"
-                        />
-                    </div>
-                    
-                    <!-- Contenido derecha -->
-                    <div class="lg:w-1/2 p-4 lg:p-8">
-
-                        <div class="mb-2" id="event-popup-text">
-
-                            <p class="text-[var(--color-accent)] font-lato text-[14px] uppercase font-medium mb-2"> EXCLUSIVIDAD MÉDICA </p>
-                            <!-- Título -->
-                            <h2 id="event-popup-title" class="text-[#261819] font-lato text-[22px]  mb-4">
-                                Título del evento
-                            </h2>
-                            
-                            <!-- Descripción -->
-                            <p id="event-popup-description" class="text-[#5A4043] text-[16px] leading-relaxed" style="font-family: Lato;">
-                                Descripción del evento
-                            </p>
-                        </div>
-                        
-
-                        <BaseForm id="events-form" class="space-y-8  rounded">
-                            <FormField
-                            label="Nombre completo"
-                            name="name"
-                            placeholder="Ej: Dra. Carolina Ávila"
-                            />
-                            <FormField
-                            label="Correo electrónico"
-                            name="email"
-                            type="email"
-                            placeholder="Ej: carolina.avila@hospitalneuro.mx"
-                            />
-                            <CheckboxField
-                            id="aviso"
-                            label="He leído y acepto el"
-                            link="/aviso-de-privacidad"
-                            />
-                            <SubmitButton text="Acceder a mis beneficios"></SubmitButton>
-                        </BaseForm>
-
-                        <script type="module">
-                            import { initForm } from "/scripts/formValidator.js";
-
-                            document.addEventListener("DOMContentLoaded", () => {
-                                initForm("events-form");
-                            });
-                        </script>    
-                    </div>
-                </div>
-
-                <div id="status" class="text-center mt-2 text-sm"></div>
-        </div>
-    </div>
-</div>
 
 
 <script>
     import dayjs from 'dayjs';
     import 'dayjs/locale/es';
+    import {
+        calendarDayAriaLabel,
+        calendarDayClasses,
+    } from '@lib/eventos/calendarDayClasses';
 
-    // Configurar dayjs en español
     dayjs.locale('es');
+
+    function escapeAttr(s) {
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;');
+    }
 
     // Script unificado para eventos, popup y calendario.
     // Los scripts con import se ejecutan como módulo (defer); DOMContentLoaded puede haber pasado ya.
@@ -605,9 +918,11 @@ const heroImageUrl = data?.heroImage?.url ?? logoUrl;
         const popupOverlay = document.getElementById('event-popup-overlay');
         const popupTitle = document.getElementById('event-popup-title');
         const popupDescription = document.getElementById('event-popup-description');
+        const popupEventType = document.getElementById('event-popup-event-type');
+        const popupDate = document.getElementById('event-popup-date');
+        const popupTime = document.getElementById('event-popup-time');
+        const popupLocationLabel = document.getElementById('event-popup-location-label');
         const popupImage = document.getElementById('event-popup-image');
-        const closePopupBtn = document.getElementById('close-event-popup');
-        const mainContent = document.querySelector('section');
         
         // Formulario
         const form = document.getElementById("events-form");
@@ -616,7 +931,25 @@ const heroImageUrl = data?.heroImage?.url ?? logoUrl;
         // Resetear popup a estado inicial
         function resetPopupToInitial() {
             if (popupTitle) popupTitle.textContent = 'Título del evento';
-            if (popupDescription) popupDescription.textContent = 'Descripción del evento';
+            if (popupDescription) {
+                popupDescription.textContent = 'Descripción del evento';
+                popupDescription.classList.remove('hidden');
+            }
+            if (popupEventType) {
+                popupEventType.textContent = '';
+                popupEventType.classList.add('hidden');
+            }
+            if (popupDate) popupDate.textContent = '';
+            if (popupTime) popupTime.textContent = '';
+            if (popupLocationLabel) popupLocationLabel.textContent = '';
+            document.getElementById('event-popup-meta-date')?.classList.add('hidden');
+            document.getElementById('event-popup-time-row')?.classList.add('hidden');
+            document.getElementById('event-popup-meta-location')?.classList.add('hidden');
+            const locLinkReset = document.getElementById('event-popup-location-link');
+            if (locLinkReset) {
+                locLinkReset.href = '#';
+                locLinkReset.classList.add('pointer-events-none');
+            }
             
             if (popupImage) {
                 popupImage.style.display = 'block';
@@ -631,16 +964,15 @@ const heroImageUrl = data?.heroImage?.url ?? logoUrl;
                 document.querySelector('.form-error')?.classList.add('hidden');
             }
             
-            // Restaurar columnas
-            const leftColumn = document.querySelector('.lg\\:w-1\\/2.relative');
-            const rightColumn = document.querySelector('.lg\\:w-1\\/2.p-4');
-            if (leftColumn) leftColumn.style.display = 'block';
-            if (rightColumn) rightColumn.style.display = 'block';
+            const leftColumn = document.getElementById('event-popup-left');
+            const rightColumn = document.getElementById('event-popup-right');
+            if (leftColumn) leftColumn.style.display = '';
+            if (rightColumn) rightColumn.style.display = '';
             
-            // Ocultar status
             if (status) {
                 status.innerHTML = '';
                 status.style.display = 'none';
+                status.classList.add('hidden');
             }
         }
         
@@ -650,16 +982,55 @@ const heroImageUrl = data?.heroImage?.url ?? logoUrl;
 
             resetPopupToInitial();
             
-            // Actualizar contenido
             if (popupImage) {
                 if (eventData.img) popupImage.src = eventData.img;
                 popupImage.alt = eventData.title || 'Evento';
             }
             if (popupTitle && eventData.title) popupTitle.textContent = eventData.title;
-            if (popupDescription && eventData.description) popupDescription.textContent = eventData.description;
-            
-            if (mainContent) mainContent.style.filter = 'blur(8px)';
+            const desc = eventData.description || '';
+            if (popupDescription) {
+                popupDescription.textContent = desc;
+                popupDescription.classList.toggle('hidden', !desc);
+            }
+
+            const et = eventData.eventType || '';
+            if (popupEventType) {
+                popupEventType.textContent = et;
+                popupEventType.classList.toggle('hidden', !et);
+            }
+
+            const dateLabel = eventData.dateLabel || '';
+            const metaDate = document.getElementById('event-popup-meta-date');
+            if (popupDate) popupDate.textContent = dateLabel;
+            metaDate?.classList.toggle('hidden', !dateLabel);
+
+            const timeLabel = eventData.timeLabel || '';
+            const timeRow = document.getElementById('event-popup-time-row');
+            if (popupTime) popupTime.textContent = timeLabel;
+            timeRow?.classList.toggle('hidden', !timeLabel);
+
+            const locLabel = eventData.locationLabel || '';
+            const metaLoc = document.getElementById('event-popup-meta-location');
+            if (popupLocationLabel) popupLocationLabel.textContent = locLabel;
+            metaLoc?.classList.toggle('hidden', !locLabel);
+
+            const locLink = document.getElementById('event-popup-location-link');
+            const url =
+                eventData.locationUrl && eventData.locationUrl !== '#' ? eventData.locationUrl : '';
+            if (locLink) {
+                if (url) {
+                    locLink.href = url;
+                    locLink.classList.remove('pointer-events-none');
+                    locLink.target = '_blank';
+                    locLink.rel = 'noopener noreferrer';
+                } else {
+                    locLink.href = '#';
+                    locLink.classList.add('pointer-events-none');
+                }
+            }
+            /** No aplicar `filter` en <main>: rompe `position:fixed` del overlay (viewport / stacking). */
             popupOverlay.classList.remove('hidden');
+            popupOverlay.setAttribute('aria-hidden', 'false');
             document.body.style.overflow = 'hidden';
         }
         
@@ -667,8 +1038,8 @@ const heroImageUrl = data?.heroImage?.url ?? logoUrl;
         function closeEventPopup() {
             if (!popupOverlay) return;
             
-            if (mainContent) mainContent.style.filter = 'none';
             popupOverlay.classList.add('hidden');
+            popupOverlay.setAttribute('aria-hidden', 'true');
             document.body.style.overflow = 'auto';
             resetPopupToInitial();
 
@@ -680,13 +1051,14 @@ const heroImageUrl = data?.heroImage?.url ?? logoUrl;
             if (form) form.style.display = 'none';
             if (popupImage) popupImage.style.display = 'none';
             
-            const leftColumn = document.querySelector('.lg\\:w-1\\/2.relative');
-            const rightColumn = document.querySelector('.lg\\:w-1\\/2.p-4');
+            const leftColumn = document.getElementById('event-popup-left');
+            const rightColumn = document.getElementById('event-popup-right');
             if (leftColumn) leftColumn.style.display = 'none';
             if (rightColumn) rightColumn.style.display = 'none';
             
             // Mostrar mensaje
             if (status) {
+                status.classList.remove('hidden');
                 status.style.display = 'flex';
                 status.style.flexDirection = 'column';
                 status.style.alignItems = 'center';
@@ -732,24 +1104,43 @@ const heroImageUrl = data?.heroImage?.url ?? logoUrl;
         
         // EVENT LISTENERS
         
-        // Botones "Saber más"
-        document.querySelectorAll('.event-popup-btn').forEach(button => {
-            button.addEventListener('click', function(e) {
-                e.preventDefault();
-                const btn = e.currentTarget;
+        function bindPopupFromTrigger(el) {
+            const open = () => {
                 openEventPopup({
-                    img: btn.getAttribute('data-img') || '',
-                    title: btn.getAttribute('data-title') || 'Evento MedRent',
-                    description: btn.getAttribute('data-description') || 'Descripción del evento'
+                    img: el.getAttribute('data-img') || '',
+                    title: el.getAttribute('data-title') || 'Evento MedRent',
+                    description: el.getAttribute('data-description') || '',
+                    eventType: el.getAttribute('data-event-type') || '',
+                    dateLabel: el.getAttribute('data-date-label') || '',
+                    timeLabel: el.getAttribute('data-time-label') || '',
+                    locationLabel: el.getAttribute('data-location-label') || '',
+                    locationUrl: el.getAttribute('data-location-url') || '#',
                 });
+            };
+            el.addEventListener('click', (e) => {
+                e.preventDefault();
+                open();
             });
-        });
+            el.addEventListener('keydown', (e) => {
+                if (e.key !== 'Enter' && e.key !== ' ') return;
+                if (el.tagName === 'BUTTON') return;
+                e.preventDefault();
+                open();
+            });
+        }
+
+        document.querySelectorAll('.event-popup-trigger').forEach(bindPopupFromTrigger);
         
         // Cerrar popup
-        if (closePopupBtn) closePopupBtn.addEventListener('click', closeEventPopup);
+        document
+            .querySelectorAll('#close-event-popup, #close-event-popup-mobile')
+            .forEach((btn) => {
+                btn.addEventListener('click', closeEventPopup);
+            });
         if (popupOverlay) {
             popupOverlay.addEventListener('click', (e) => {
-                if (e.target === popupOverlay) closeEventPopup();
+                const card = document.getElementById('PopupContent');
+                if (card && !card.contains(e.target)) closeEventPopup();
             });
         }
         
@@ -778,88 +1169,293 @@ const heroImageUrl = data?.heroImage?.url ?? logoUrl;
         //     });
         // }
         
-        // CALENDARIO
-        
+        // CALENDARIO (interactivo: hoy, eventos, selección, sync scroll, prev/next)
+        let displayedMonthKey = '';
+        /** @type {string | null} */
+        let selectedDateIso = null;
+        /** @type {number} */
+        let scrollSyncRaf = 0;
+        /** @type {number} */
+        let suppressScrollSyncUntil = 0;
+
+        /** @param {string} mesKey */
+        function getDiasConEventosForMonth(mesKey) {
+            const seccionMes = document.querySelector(`[data-month="${mesKey}"]`);
+            if (!seccionMes) return [];
+            const eventDaysAttr = seccionMes.getAttribute('data-event-days');
+            if (!eventDaysAttr) return [];
+            try {
+                const arr = JSON.parse(eventDaysAttr);
+                return Array.isArray(arr) ? arr : [];
+            } catch {
+                return [];
+            }
+        }
+
+        /** @param {string} fechaBase */
         function generarCalendario(fechaBase) {
             const fecha = dayjs(fechaBase);
             const startOfMonth = fecha.startOf('month');
             const startOfWeek = startOfMonth.startOf('week');
-            
-            const calendarDays = [];
+
+            const dias = [];
             let currentDay = startOfWeek;
-            
+
             for (let i = 0; i < 42; i++) {
-                calendarDays.push({
+                dias.push({
                     day: currentDay.date(),
                     isCurrentMonth: currentDay.month() === fecha.month(),
                     isToday: currentDay.isSame(dayjs(), 'day'),
-                    fullDate: currentDay.format('YYYY-MM-DD')
+                    fullDate: currentDay.format('YYYY-MM-DD'),
                 });
                 currentDay = currentDay.add(1, 'day');
             }
-            
-            return {
-                dias: calendarDays,
-                nombreMes: (() => {
-                    const raw = fecha.format('MMMM YYYY');
-                    return raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
-                })()
-            };
+
+            const raw = fecha.format('MMMM YYYY');
+            const nombreMes =
+                raw.charAt(0).toUpperCase() + raw.slice(1).toLowerCase();
+
+            return { dias, nombreMes };
         }
-        
-        function actualizarCalendario(mesKey) {
-            const calendario = generarCalendario(mesKey + '-01');
+
+        function updateNavButtons() {
+            const el = document.getElementById('calendario-dinamico');
+            const min = el?.dataset.minMonth;
+            const max = el?.dataset.maxMonth;
+            const prev = document.getElementById('cal-month-prev');
+            const next = document.getElementById('cal-month-next');
+            if (!(prev instanceof HTMLButtonElement) || !(next instanceof HTMLButtonElement)) return;
+            if (!min || !max) {
+                prev.disabled = true;
+                next.disabled = true;
+                return;
+            }
+            prev.disabled = displayedMonthKey <= min;
+            next.disabled = displayedMonthKey >= max;
+        }
+
+        /** @param {string} mesKey */
+        function renderCalendar(mesKey) {
+            displayedMonthKey = mesKey;
+            const cal = generarCalendario(mesKey + '-01');
+            const diasConEventos = getDiasConEventosForMonth(mesKey);
             const mesActualElement = document.getElementById('mes-actual');
-            const calendarioDiasContainer = document.querySelector('#calendario-dinamico .grid.grid-cols-7.gap-1');
-            
-            const seccionMes = document.querySelector(`[data-month="${mesKey}"]`);
-            let diasConEventos = [];
-            
-            if (seccionMes) {
-                const eventDaysAttr = seccionMes.getAttribute('data-event-days');
-                if (eventDaysAttr) {
-                    try { diasConEventos = JSON.parse(eventDaysAttr); } catch (e) {}
+            const grid = document.getElementById('calendario-dias-grid');
+
+            if (mesActualElement) mesActualElement.textContent = cal.nombreMes;
+            if (!grid) return;
+
+            const weeks = [];
+            for (let i = 0; i < cal.dias.length; i += 7) {
+                weeks.push(cal.dias.slice(i, i + 7));
+            }
+
+            grid.innerHTML = weeks
+                .map(
+                    (week) =>
+                        `<div role="row" class="grid grid-cols-7 gap-0.5">` +
+                        week
+                            .map((dayInfo) => {
+                                const hasEvent =
+                                    dayInfo.isCurrentMonth &&
+                                    diasConEventos.some(
+                                        (d) => Number(d) === dayInfo.day,
+                                    );
+                                const cls = calendarDayClasses({
+                                    isCurrentMonth: dayInfo.isCurrentMonth,
+                                    isToday: dayInfo.isToday,
+                                    fullDate: dayInfo.fullDate,
+                                    day: dayInfo.day,
+                                    diasConEventos,
+                                    selectedIso: selectedDateIso,
+                                });
+                                const label = calendarDayAriaLabel(
+                                    dayInfo.fullDate,
+                                    hasEvent,
+                                    (d) => dayjs(d),
+                                );
+                                const disabled = !dayInfo.isCurrentMonth
+                                    ? ' disabled'
+                                    : '';
+                                const pressed =
+                                    selectedDateIso === dayInfo.fullDate
+                                        ? 'true'
+                                        : 'false';
+                                const ariaCurrent = dayInfo.isToday
+                                    ? ' aria-current="date"'
+                                    : '';
+                                return `<button type="button" role="gridcell" class="${cls}" data-cal-date="${dayInfo.fullDate}"${disabled} aria-label="${escapeAttr(label)}" aria-pressed="${pressed}"${ariaCurrent}>${dayInfo.day}</button>`;
+                            })
+                            .join('') +
+                        `</div>`,
+                )
+                .join('');
+
+            updateNavButtons();
+        }
+
+        function getCalendarMarkerTop() {
+            const monthTitle = document.getElementById('mes-actual');
+            if (monthTitle) return monthTitle.getBoundingClientRect().top + 12;
+            const calHost = document.getElementById('calendario-dinamico');
+            if (calHost) return calHost.getBoundingClientRect().top + 36;
+            return 192;
+        }
+
+        function smoothScrollToY(top) {
+            const targetTop = Math.max(0, top);
+            const L = window.__lenis__;
+            if (L && typeof L.scrollTo === 'function') {
+                L.scrollTo(targetTop, { duration: 0.55 });
+                return;
+            }
+            window.scrollTo({ top: targetTop, behavior: 'smooth' });
+        }
+
+        function openMonthAccordion(mesKey, alignToCalendarTitle = false) {
+            const details = document.querySelector(
+                `details[data-month="${mesKey}"]`,
+            );
+            if (!(details instanceof HTMLDetailsElement)) return;
+            details.open = true;
+            const summary = details.querySelector('summary');
+            if (!alignToCalendarTitle || !(summary instanceof HTMLElement)) {
+                details.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                return;
+            }
+
+            // Evita que el sync por scroll reescriba el mes durante el desplazamiento programático.
+            suppressScrollSyncUntil = Date.now() + 650;
+
+            // Alinea el título del mes del listado con el título del mes del calendario.
+            const alignSummaryToMarker = () => {
+                const markerTop = getCalendarMarkerTop();
+                const summaryTop = summary.getBoundingClientRect().top;
+                const delta = summaryTop - markerTop;
+                if (Math.abs(delta) < 1) return;
+                smoothScrollToY(window.scrollY + delta);
+            };
+
+            requestAnimationFrame(() => {
+                alignSummaryToMarker();
+                // Segunda corrección por si al abrir `details` cambia el layout unos ms después.
+                setTimeout(alignSummaryToMarker, 120);
+            });
+        }
+
+        /** @param {number} delta */
+        function shiftMonth(delta) {
+            const el = document.getElementById('calendario-dinamico');
+            const min = el?.dataset.minMonth;
+            const max = el?.dataset.maxMonth;
+            if (!min || !max) return;
+            const nk = dayjs(displayedMonthKey + '-01')
+                .add(delta, 'month')
+                .format('YYYY-MM');
+            if (nk < min || nk > max) return;
+            renderCalendar(nk);
+            openMonthAccordion(nk, true);
+        }
+
+        const calHost = document.getElementById('calendario-dinamico');
+        calHost?.addEventListener('click', (e) => {
+            const t = e.target;
+            if (!(t instanceof Element)) return;
+            const btn = t.closest('button[data-cal-date]');
+            if (!btn || !(btn instanceof HTMLButtonElement) || btn.disabled)
+                return;
+            const iso = btn.getAttribute('data-cal-date');
+            if (!iso) return;
+            const parts = iso.split('-');
+            const mesKey = `${parts[0]}-${parts[1]}`;
+            selectedDateIso =
+                selectedDateIso === iso ? null : iso;
+            renderCalendar(mesKey);
+            if (selectedDateIso) openMonthAccordion(mesKey);
+        });
+
+        document
+            .getElementById('cal-month-prev')
+            ?.addEventListener('click', () => shiftMonth(-1));
+        document
+            .getElementById('cal-month-next')
+            ?.addEventListener('click', () => shiftMonth(1));
+
+        /**
+         * Mes activo según scroll: usa el `<summary>` de cada mes (título), no el `details`
+         * completo — si un mes está abierto y es muy alto, el bloque entero seguiría
+         * “ganando” y el calendario no pasaría al mes siguiente.
+         * El mes elegido es el de mayor `top` entre los que ya cruzaron la línea guía.
+         */
+        function syncCalendarToVisibleMonth() {
+            if (Date.now() < suppressScrollSyncUntil) return;
+            const sections = document.querySelectorAll(
+                "details.event-month-details[data-month]",
+            );
+            if (sections.length === 0) return;
+
+            const marker = Math.min(
+                Math.max(window.innerHeight * 0.3, 120),
+                260,
+            );
+            let bestKey = null;
+            let bestTop = -Infinity;
+
+            sections.forEach((details) => {
+                const key = details.getAttribute("data-month");
+                if (!key) return;
+                const summary = details.querySelector("summary");
+                if (!summary) return;
+                const r = summary.getBoundingClientRect();
+                if (r.bottom <= 2) return;
+                if (r.top >= window.innerHeight - 2) return;
+                if (r.top <= marker && r.top > bestTop) {
+                    bestTop = r.top;
+                    bestKey = key;
                 }
-            }
-            
-            if (mesActualElement) mesActualElement.textContent = calendario.nombreMes;
-            
-            if (calendarioDiasContainer) {
-                calendarioDiasContainer.innerHTML = calendario.dias.map(dayInfo => {
-                    const hasEvent = dayInfo.isCurrentMonth && diasConEventos.includes(dayInfo.day);
-                    const clases = `flex justify-center items-center w-10 h-10 rounded-full text-sm font-medium mx-auto ${
-                        dayInfo.isToday ? "border-3 border-[#006764] bg-transparent" :
-                        hasEvent ? "bg-[#006764] text-white" :
-                        dayInfo.isCurrentMonth ? "text-gray-700 hover:bg-gray-100 cursor-pointer" : "text-gray-300"
-                    }`;
-                    return `<div class="${clases}">${dayInfo.day}</div>`;
-                }).join('');
+            });
+
+            if (bestKey && bestKey !== displayedMonthKey) {
+                renderCalendar(bestKey);
             }
         }
-        
-        function configurarObserver() {
-            const secciones = document.querySelectorAll('[data-month]');
-            const observer = new IntersectionObserver((entries) => {
-                entries.forEach(entry => {
-                    if (entry.isIntersecting && entry.intersectionRatio > 0.5) {
-                        const mesKey = entry.target.getAttribute('data-month');
-                        if (mesKey) actualizarCalendario(mesKey);
-                    }
-                });
-            }, { threshold: [0.5], rootMargin: '-120px 0px -50% 0px' });
-            
-            secciones.forEach(seccion => observer.observe(seccion));
+
+        function scheduleScrollSync() {
+            if (scrollSyncRaf) return;
+            scrollSyncRaf = requestAnimationFrame(() => {
+                scrollSyncRaf = 0;
+                syncCalendarToVisibleMonth();
+            });
         }
-        
-        // Inicializar calendario
-        configurarObserver();
-        let mesInicial = dayjs().format('YYYY-MM');
-        const primerSeccionMes = document.querySelector('[data-month]');
-        if (primerSeccionMes) {
-            const mesKey = primerSeccionMes.getAttribute('data-month');
-            if (mesKey) mesInicial = mesKey;
+
+        function configurarScrollSyncCalendario() {
+            scheduleScrollSync();
+            window.addEventListener("scroll", scheduleScrollSync, {
+                passive: true,
+            });
+            window.addEventListener("resize", scheduleScrollSync);
+
+            let tries = 0;
+            function attachLenis() {
+                const L = window.__lenis__;
+                if (L && typeof L.on === "function") {
+                    L.on("scroll", scheduleScrollSync);
+                    return;
+                }
+                if (tries++ < 180) requestAnimationFrame(attachLenis);
+            }
+            attachLenis();
         }
-        actualizarCalendario(mesInicial);
+
+        const calEl0 = document.getElementById("calendario-dinamico");
+        const mesInicial =
+          (calEl0?.dataset.initialMonth || "").trim() ||
+          document.querySelector("[data-month]")?.getAttribute("data-month") ||
+          dayjs().format("YYYY-MM");
+        displayedMonthKey = mesInicial;
+        selectedDateIso = null;
+        renderCalendar(mesInicial);
+        configurarScrollSyncCalendario();
     }
 
     if (document.readyState === 'loading') {
@@ -868,3 +1464,14 @@ const heroImageUrl = data?.heroImage?.url ?? logoUrl;
         initEventosPage();
     }
 </script>
+
+<style is:global>
+  .event-month-details[open] .event-month-chevron {
+    transform: rotate(180deg);
+  }
+</style>
+
+    <Fragment slot="overlays">
+        <EventPopupModal />
+    </Fragment>
+</Layout>

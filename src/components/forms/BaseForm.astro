@@ -3,6 +3,8 @@
 const {
   id,
   class: className = "",
+  wrapperClass = "",
+  containerClass = "",
   successTitle = "Gracias por contactarnos.",
   successText = "Tu solicitud ha sido registrada y un asesor especializado se comunicará contigo en las próximas horas para brindarte asesoría personalizada.",
   errorTitle = "No fue posible enviar la solicitud",
@@ -10,10 +12,10 @@ const {
 } = Astro.props;
 ---
 
-<div id={`${id}-wrapper`} class="form-wrapper relative">
+<div id={`${id}-wrapper`} class={`form-wrapper relative ${wrapperClass}`.trim()}>
 
   <!-- FORM -->
-  <div class="form-container">
+  <div class={`form-container ${containerClass}`.trim()}>
     <form id={id} class={className}>
       <slot />
     </form>

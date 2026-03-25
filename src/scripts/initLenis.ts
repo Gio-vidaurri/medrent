@@ -9,6 +9,8 @@ declare global {
       touchMultiplier?: number;
       wheelMultiplier?: number;
     };
+    /** Instancia Lenis para páginas que sincronizan UI con el scroll (p. ej. calendario en /eventos). */
+    __lenis__?: import("lenis").default;
   }
 }
 
@@ -30,6 +32,8 @@ const bootLenis = () => {
     },
     autoRaf: false,
   });
+
+  window.__lenis__ = lenis;
 
   let rafId = 0;
   const raf = (time: number) => {

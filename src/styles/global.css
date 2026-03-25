@@ -331,12 +331,10 @@ div.citaBlogAuthor span {
 
 
 @media (min-width: 769px) {
+  /* Legacy Glider (.glider-track). Glide.js usa .glide__track: no forzar display:block ahí (rompe el carrusel). */
   .sliderArticulosRelacionados .glider-track {
     display: flex;
     justify-content: space-between;
-  }
-  .sliderArticulosRelacionados .glide__track {
-    display: block;
   }
 }
 
@@ -344,6 +342,16 @@ div.citaBlogAuthor span {
 .defer-section {
   content-visibility: auto;
   contain-intrinsic-size: 1px 900px;
+}
+
+/*
+ * Vitrina blog (Glide): content-visibility:auto puede retrasar o omitir el pintado de
+ * .glide__slide / track y las cards parecen vacías hasta interactuar. Forzar pintado normal.
+ */
+section.sliderArticulosRelacionados.defer-section {
+  content-visibility: visible !important;
+  contain-intrinsic-size: auto;
+  contain: none;
 }
 
 .mobile-gallery-slider {

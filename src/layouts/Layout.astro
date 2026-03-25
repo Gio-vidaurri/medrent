@@ -166,6 +166,9 @@ import StickyCta from "@components/layout/overlays/StickyCta.astro";
       <slot />
     </main>
 
+    <!-- Modales / overlays fuera de <main>: evita que `filter`/`transform` en ancestros rompan `position:fixed` (p. ej. Lenis, blur del fondo). -->
+    <slot name="overlays" />
+
     <StickyCta />
 
     <Footer site={site}/>
