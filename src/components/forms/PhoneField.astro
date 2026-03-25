@@ -3,19 +3,19 @@
 ---
 
 <div class="relative form-phone">
-  <label class="absolute -top-3 left-3 bg-[var(--color-green-dark)] px-2 text-sm text-[#FFF] rounded-xs phone-label">
+  <label for="phone-input" class="absolute -top-3 left-3 bg-[var(--color-green-dark)] px-2 text-sm text-[#FFF] rounded-xs phone-label">
     Teléfono de contacto*
   </label>
 
   <div class="relative phone-wrapper">
     <input
+      id="phone-input"
       name="phone"
       type="tel"
       placeholder="Ej. 55 1234 5678"
       required
       inputmode="numeric"
       autocomplete="off"
-      id="phone-input"
       class="phone-input w-full border-[var(--color-green-dark)] border-2 rounded-[4px] px-4 py-3 placeholder:text-[#A0A0A0] text-[var(--color-green-dark)] focus:outline-none bg-white hover:bg-[var(--color-secondary-light)] focus:bg-[var(--color-secondary-light)] transition-colors duration-300"
     />
         <!-- <div class="country-dropdown absolute left-0 w-full hidden" style="top:100%; z-index:10000;">
