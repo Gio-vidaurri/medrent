@@ -1,3 +1,5 @@
+import { ESPECIALTIES } from "@lib/site";
+
 export type HomeEspecialidadItem = {
   name: string;
   slug: string;
@@ -5,45 +7,19 @@ export type HomeEspecialidadItem = {
   iconImage: string;
 };
 
-/** Misma fuente que el mosaico de especialidades del home (`index.astro`). */
-export const HOME_ESPECIALIDADES: HomeEspecialidadItem[] = [
-  {
-    name: "Neurofisiología",
-    slug: "neurofisiologia",
+/**
+ * Mosaico del home: misma fuente que el listado `/especialidades`
+ * ([`ESPECIALTIES`](./site.ts)), evitando duplicar nombres/slugs en otro array.
+ * Imágenes: mismas rutas que [`especialidades/index.astro`](../pages/especialidades/index.astro).
+ */
+export const HOME_ESPECIALIDADES: HomeEspecialidadItem[] = ESPECIALTIES.map(
+  (c) => ({
+    name: c.Nombre,
+    slug: c.Slug,
     isActive: true,
-    iconImage: "/temp/categorias/img - especialidad.png",
-  },
-  {
-    name: "Neurocirugía",
-    slug: "neurocirugia",
-    isActive: true,
-    iconImage: "/temp/categorias/img - especialidad-1.png",
-  },
-  {
-    name: "Neuromodulación",
-    slug: "neuromodulacion",
-    isActive: true,
-    iconImage: "/temp/categorias/img - especialidad-2.png",
-  },
-  {
-    name: "Rehabilitación",
-    slug: "rehabilitacion",
-    isActive: true,
-    iconImage: "/temp/categorias/img - especialidad-3.png",
-  },
-  {
-    name: "Neurovascular",
-    slug: "neurovascular",
-    isActive: true,
-    iconImage: "/temp/categorias/img - especialidad-4.png",
-  },
-  {
-    name: "Consumibles",
-    slug: "consumibles",
-    isActive: true,
-    iconImage: "/temp/categorias/img - especialidad-5.png",
-  },
-];
+    iconImage: `/temp/especialidades/${c.Image}`,
+  }),
+);
 
 export function getHomeEspecialidadesForSlider(): HomeEspecialidadItem[] {
   return HOME_ESPECIALIDADES.filter((m) => m.name !== "Consumibles");

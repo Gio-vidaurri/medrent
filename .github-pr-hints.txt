@@ -1,0 +1,6 @@
+Sugerencia de PRs pequeños hacia Ederhdz/medrent (no commitear docs/ ni .vscode/settings.json):
+
+1) chore(strapi): getPromotionSlides en index + eventos; comentario en promotions.ts
+2) refactor(home): HOME_ESPECIALIDADES derivado de ESPECIALTIES (site.ts)
+3) chore: eliminar scripts huérfanos main.ts / init-sliders.ts (sin entrada en app)
+4) docs: solo si el equipo pide — mantener proceso fuera del repo (gitignore docs/)

@@ -1,4 +1,8 @@
 ---
+/**
+ * Carrusel de productos relacionados (PDP + listados). Usa Glide con controles
+ * por página; comportamiento responsive alineado con PRs #61/#66 en upstream.
+ */
 const { data, title, prefixId } = Astro.props;
 const { disableHorizontalPadding = false } = Astro.props;
 import ProductCard from '@components/product/ProductCard.astro';

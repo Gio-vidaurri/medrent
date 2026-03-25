@@ -3,6 +3,7 @@ import dayjs from 'dayjs';
 import 'dayjs/locale/es';
 import Layout from '../layouts/Layout.astro';
 import { strapiFetch } from "@server/strapiClient";
+import { getPromotionSlides } from "@server/api/promotions";
 import PromotionSlider from '@components/sections/PromotionSlider.astro';
 import BaseForm from "@components/forms/BaseForm.astro";
 import FormField from "@components/forms/FormField.astro";
@@ -17,7 +18,7 @@ import Breadcrumb from '@components/navigation/Breadcrumb.astro';
 // import Code from '@components/js.astro';
 
 let data: any = {};
-// let dataPromociones: any[] = [];
+let promotionsData: any[] = [];
 
 try {
   const response = await strapiFetch("/events-page?populate[events][populate]=image&populate=heroImage");  
@@ -29,6 +30,13 @@ try {
     title: 'Eventos médicos',
     description: 'Mantente actualizado con los últimos avances...'
   };
+}
+
+try {
+  promotionsData = await getPromotionSlides();
+} catch (e) {
+  console.error("Error cargando promociones (eventos):", e);
+  promotionsData = [];
 }
 
 // try {
@@ -469,8 +477,8 @@ const heroImageUrl = data?.heroImage?.url ?? logoUrl;
         </div>
     </section>
 
-    <!-- Slider de promociones -->
-    <PromotionSlider />
+    <!-- Slider de promociones (misma fuente que home/PLP/PDP: getPromotionSlides) -->
+    <PromotionSlider promotionsData={promotionsData} />
 
 
     <section class="max-w-7xl mx-auto py-8 sliderArticulosRelacionados px-4 md:px-6">
