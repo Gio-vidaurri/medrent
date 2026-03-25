@@ -449,6 +449,7 @@ const heroImageUrl = data?.heroImage?.url ?? logoUrl;
                                                                 </div>
                                                                 <div class="pt-4">
                                                                     <button 
+                                                                        type="button"
                                                                         class="event-popup-btn inline-flex items-center gap-2 text-[#006764] font-lato text-[14px] hover:opacity-80 transition-opacity bg-transparent border-none cursor-pointer"
                                                                         data-title={evento.title || ''}
                                                                         data-description={evento.subtitle || ''}
@@ -597,10 +598,9 @@ const heroImageUrl = data?.heroImage?.url ?? logoUrl;
     // Configurar dayjs en español
     dayjs.locale('es');
 
-    // Script unificado para eventos, popup y calendario
-    document.addEventListener('DOMContentLoaded', function() {
-        // console.log('DOM loaded - inicializando componentes');
-
+    // Script unificado para eventos, popup y calendario.
+    // Los scripts con import se ejecutan como módulo (defer); DOMContentLoaded puede haber pasado ya.
+    function initEventosPage() {
         // Popup
         const popupOverlay = document.getElementById('event-popup-overlay');
         const popupTitle = document.getElementById('event-popup-title');
@@ -626,9 +626,9 @@ const heroImageUrl = data?.heroImage?.url ?? logoUrl;
             if (form) {
                 form.style.display = 'block';
                 form.reset();
-                document.querySelector('.form-container').classList.remove('hidden');
-                document.querySelector('.form-success').classList.add('hidden');
-                document.querySelector('.form-error').classList.add('hidden');
+                document.querySelector('.form-container')?.classList.remove('hidden');
+                document.querySelector('.form-success')?.classList.add('hidden');
+                document.querySelector('.form-error')?.classList.add('hidden');
             }
             
             // Restaurar columnas
@@ -651,13 +651,16 @@ const heroImageUrl = data?.heroImage?.url ?? logoUrl;
             resetPopupToInitial();
             
             // Actualizar contenido
-            if (popupImage && eventData.img) popupImage.src = eventData.img; popupImage.alt = eventData.title || 'Evento';
+            if (popupImage) {
+                if (eventData.img) popupImage.src = eventData.img;
+                popupImage.alt = eventData.title || 'Evento';
+            }
             if (popupTitle && eventData.title) popupTitle.textContent = eventData.title;
             if (popupDescription && eventData.description) popupDescription.textContent = eventData.description;
             
             if (mainContent) mainContent.style.filter = 'blur(8px)';
-                popupOverlay.classList.remove('hidden');
-                document.body.style.overflow = 'hidden';
+            popupOverlay.classList.remove('hidden');
+            document.body.style.overflow = 'hidden';
         }
         
         // Cerrar popup
@@ -733,10 +736,11 @@ const heroImageUrl = data?.heroImage?.url ?? logoUrl;
         document.querySelectorAll('.event-popup-btn').forEach(button => {
             button.addEventListener('click', function(e) {
                 e.preventDefault();
+                const btn = e.currentTarget;
                 openEventPopup({
-                    img: this.getAttribute('data-img') || '',
-                    title: this.getAttribute('data-title') || 'Evento MedRent',
-                    description: this.getAttribute('data-description') || 'Descripción del evento'
+                    img: btn.getAttribute('data-img') || '',
+                    title: btn.getAttribute('data-title') || 'Evento MedRent',
+                    description: btn.getAttribute('data-description') || 'Descripción del evento'
                 });
             });
         });
@@ -856,5 +860,11 @@ const heroImageUrl = data?.heroImage?.url ?? logoUrl;
             if (mesKey) mesInicial = mesKey;
         }
         actualizarCalendario(mesInicial);
-    });
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initEventosPage);
+    } else {
+        initEventosPage();
+    }
 </script>
