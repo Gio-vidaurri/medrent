@@ -1,4 +1,48 @@
 User-agent: *
-Allow: /
+# --- Bloqueos de superficies internas ---
+Disallow: /admin/
+Disallow: /dashboard/
+Disallow: /login/
+Disallow: /staging/
+Disallow: /mvp/
+Disallow: /tmp/
+Disallow: /cgi-bin/
+Disallow: /api/
 
+# --- Parámetros (facets/UTM) ---
+Disallow: /*?*
+
+# --- Permitir recursos necesarios para renderizado (Astro) ---
+Allow: /_astro/
+Allow: /assets/
+Allow: /images/
+Allow: /css/
+Allow: /js/
+Allow: /uploads/
+Allow: /favicon.ico
+Allow: /scripts/
+Allow: /fonts/
+
+# --- Sitemaps en host canónico (índice real del proyecto) ---
+Sitemap: https://www.medrent.mx/sitemap-index.xml
+
+# Bing (sí respeta crawl-delay)
+User-agent: bingbot
+Crawl-delay: 10
+Disallow: /admin/
+Disallow: /dashboard/
+Disallow: /login/
+Disallow: /tmp/
+Disallow: /cgi-bin/
+Disallow: /api/
+Disallow: /*?*
+Allow: /_astro/
+Allow: /assets/
+Allow: /images/
+Allow: /css/
+Allow: /js/
+Allow: /uploads/
+Allow: /favicon.ico
+Allow: /scripts/
+Allow: /fonts/
 Sitemap: https://www.medrent.mx/sitemap-index.xml

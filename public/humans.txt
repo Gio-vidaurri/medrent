@@ -1,13 +1,121 @@
 /* TEAM */
-Design & UX: Giovanni Vidaurri
-Developer: Eder Hernández
-Role: Fullstack Developer
-Location: Mexico
+This website was thoughtfully crafted by a multidisciplinary team focused on building a high-performance, medically accurate, and scalable platform for Medrent.mx.
 
-/* SITE */
-Project: Medrent
-Framework: Astro
-Hosting: Vercel
-Standards: HTML5, CSS3, JavaScript
-Language: es-MX
-Version: v1 (pre-release)
+Product Lead & UX Strategy
+Benjamin Giovanni Vidaurri Solís
+– Information architecture, UX/UI design, accessibility, atomic design system, technical SEO strategy, CRO alignment, and product direction across specialties and PDP architecture.
+
+Principal Full-Stack Developer
+Eder Hernández
+– Astro + Strapi architecture, performance optimization, CMS modeling, structured data implementation, component refactoring, and Vercel deployments.
+
+Jr. Developer
+Paz
+– Frontend support, component implementation, QA assistance, and UI adjustments.
+
+MedRent Direction
+Iván Francisco García Anguiano
+– Marketing strategy, brand supervision, business alignment, and final content validation.
+
+
+
+/* SITE INFO */
+Website: https://www.medrent.mx
+Multi-region structure: / (MX) | /co (Colombia)
+Last updated: February 2026
+Language: Spanish (es-MX)
+
+Stack & Tools:
+– Astro JS
+– Strapi CMS (Headless architecture)
+– Tailwind CSS
+– Vercel (CDN & Edge deployment)
+– Google Analytics 4
+– Google Tag Manager
+– HubSpot CRM
+– Schema.org structured data (MedicalDevice, Organization, WebPage, Product)
+– Open Graph & Twitter Cards
+– robots.txt, humans.txt, llms.txt
+– XML sitemaps (main, images, products)
+
+
+
+/* PERFORMANCE */
+– Lighthouse scores +85 optimization baseline
+– Modular PDP/PLP component system
+– AVIF / WebP optimized media
+– Lazy loading for galleries and product assets
+– Code splitting & SSR optimization
+– CDN edge propagation
+
+
+
+/* ACCESSIBILITY */
+– Progressive WCAG 2.1 AA alignment
+– Semantic HTML structure
+– Accessible navigation
+– ARIA labels and roles
+– Focus states normalized
+– Structured headings for medical content hierarchy
+
+
+
+/* SITE STRUCTURE */
+– Home: Institutional overview and therapeutic portfolio positioning
+– Specialties:
+   • Neurofisiología
+   • Neurocirugía
+   • Neurovascular
+   • Neuromodulación
+   • Rehabilitación
+
+– Product Catalog:
+   Technical sheets, FAQs, downloadable brochures, specifications, related products, consumables.
+
+– Brands:
+   Ambu, Cadwell, Deymed, Esaote, Samsung Medison, Neuroelectrics, Spes Medica, Syneika, SpineGuard, Weaver and Company, Luciole Medical, Hasomed, Astar, Physiomed, tVNS and more.
+
+– Financing:
+   Structured medical equipment financing with specialized partners.
+
+– Blog:
+   Educational content in neurotechnology, rehabilitation, diagnostic imaging, and clinical innovation.
+
+– Events:
+   Medical congresses, workshops, product launches.
+
+– Legal:
+   Privacy Notice, Terms of Use, Cookies Policy, ARCO rights.
+
+
+
+/* DATA PROTECTION */
+Data handling complies with the Mexican Federal Law on Protection of Personal Data (LFPDPPP).
+Data storage infrastructure: Google Cloud Platform (GCP).
+Controlled access by role-based permissions and internal governance.
+
+Data Protection Department:
+Av. Insurgentes Sur 866, Col. Del Valle, Benito Juárez, CDMX, 03100
+Phone: +52 55 1078 9311
+
+
+
+/* CONTACT */
+Email: sdr_telemarketing@medrent.mx
+Phone: +52 55 5985 4347 (Mon–Fri, 9:00–18:00 CST)
+
+
+
+/* SOCIAL */
+LinkedIn: Medrent
+Instagram: @medrent.mx
+Facebook: Medrent
+YouTube: Medrent Oficial
+
+
+
+/* THANK YOU */
+To the neurosurgeons, neurologists, rehabilitation specialists, and healthcare professionals who trust our technology — thank you.
+
+Medical technology, deployed by real humans.
+Built in Mexico for advanced clinical practice.

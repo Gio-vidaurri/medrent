@@ -1,14 +1,82 @@
-# llms.txt for medrent.mx
-# Project: Medrent
-# Language: es-MX
+# MedRent (Medrent®)
 
-User-agent: *
-Allow: /
+> MedRent distribuye tecnología médica, equipos y consumibles en México para profesionales e instituciones de salud, con foco en neurofisiología, neurocirugía, neuromodulación, neurovascular y rehabilitación. Ofrece catálogo de productos por marca y especialidad, financiamiento (Korum Capital), blog educativo, eventos y canales de contacto. El contenido es informativo y comercial para el ámbito sanitario B2B; no sustituye juicio clínico, prescripción ni relación médico-paciente.
 
-Canonical: https://www.medrent.mx
-Contact: contacto@medrent.mx
+## Contacto y URL canónica
 
-Description:
-Medrent es una empresa especializada en soluciones médicas,
-equipamiento y tecnología para especialidades neurológicas
-y áreas clínicas relacionadas.
+- Sitio canónico: https://www.medrent.mx
+- Email: sdr_telemarketing@medrent.mx
+- Teléfono: +52 55 5985 4347
+
+## Metadatos del sitio
+
+- Idioma principal del contenido: español (México), `es-MX`
+- Tipo: sitio corporativo y catálogo con SSR (Astro), contenido editorial y legal desde Strapi (headless CMS)
+- Actualización de este archivo: abril 2026
+- Archivos relacionados: https://www.medrent.mx/robots.txt · https://www.medrent.mx/humans.txt
+
+## Sitemaps XML (fuente de verdad para indexación)
+
+El índice oficial enlaza los sitemaps publicados:
+
+- Índice: https://www.medrent.mx/sitemap-index.xml
+- Páginas estáticas priorizadas (listado explícito en código): https://www.medrent.mx/sitemap-pages.xml
+
+**Nota para sistemas de recuperación:** `sitemap-pages.xml` no incluye todas las URLs públicas del sitio (por ejemplo productos, blog, marcas, eventos, contacto o la especialidad neurovascular). Para cobertura completa, usar el índice anterior y el rastreo respetando `robots.txt`.
+
+## URLs listadas actualmente en `sitemap-pages.xml`
+
+Cada entrada coincide con el arreglo `PAGES` en el código del proyecto:
+
+- https://www.medrent.mx/ — Inicio, propuesta de valor y accesos a especialidades y catálogo
+- https://www.medrent.mx/especialidades — Índice de líneas terapéuticas
+- https://www.medrent.mx/especialidades/neurocirugia — Especialidad neurocirugía
+- https://www.medrent.mx/especialidades/neurofisiologia — Especialidad neurofisiología
+- https://www.medrent.mx/especialidades/neuromodulacion — Especialidad neuromodulación
+- https://www.medrent.mx/especialidades/rehabilitacion — Especialidad rehabilitación
+- https://www.medrent.mx/aplicaciones — Incluida en el sitemap; las aplicaciones clínicas detalladas viven principalmente bajo `/especialidades/{especialidad}/{subcategoria}` en la implementación actual
+- https://www.medrent.mx/acerca-de-nosotros — Quiénes somos e historia institucional
+- https://www.medrent.mx/nuestras-marcas — Directorio de marcas distribuidas
+- https://www.medrent.mx/financiamiento — Financiamiento de equipo médico (Korum Capital)
+
+## Rutas públicas adicionales (implementadas en Astro; pueden no estar en `sitemap-pages.xml`)
+
+- https://www.medrent.mx/contacto — Formulario e información de contacto
+- https://www.medrent.mx/eventos — Agenda y contenido de eventos médicos
+- https://www.medrent.mx/especialidades/neurovascular — Especialidad neurovascular (presente en navegación y datos del sitio; conviene alinear con el sitemap en el código si se desea paridad)
+- https://www.medrent.mx/productos — Listado de productos (PLP)
+- https://www.medrent.mx/productos/{slug} — Ficha de producto (PDP); `slug` proviene del catálogo/CMS
+- https://www.medrent.mx/nuestras-marcas/{marca} — Página de marca; slug dinámico
+- https://www.medrent.mx/especialidades/{categoria}/{subcategoria}/ — Aplicación clínica dentro de una especialidad (patrón de URL con barra final)
+- https://www.medrent.mx/blog — Listado de artículos
+- https://www.medrent.mx/blog/{slug-articulo} — Artículo individual
+- https://www.medrent.mx/blog/autor/{autor} — Perfil o listado por autor
+- https://www.medrent.mx/aviso-de-privacidad — Aviso de privacidad (contenido desde Strapi)
+- https://www.medrent.mx/condiciones-de-uso — Condiciones de uso (contenido desde Strapi)
+- Otras páginas legales publicadas en Strapi bajo el mismo patrón `/{slug}` si existen en CMS
+
+## Especialidades (cinco líneas terapéuticas)
+
+Rama principal: `/especialidades`, con subrutas por slug: `neurofisiologia`, `neurocirugia`, `neuromodulacion`, `neurovascular`, `rehabilitacion`. Cada especialidad enlaza a subcategorías de aplicación clínica (equipos y soluciones asociadas).
+
+## Catálogo, marcas y contenido
+
+- **Productos:** fichas con especificaciones, FAQs, recursos descargables y productos relacionados cuando aplica.
+- **Marcas:** páginas de marca y relación con el catálogo (múltiples fabricantes en el sector diagnóstico, neuro y rehabilitación).
+- **Blog:** divulgación y contenido profesional en torno a tecnología médica y práctica clínica.
+- **Eventos:** congresos, talleres y lanzamientos vinculados al sector.
+
+## Límites, cumplimiento y uso por modelos de lenguaje
+
+- El sitio promueve equipamiento y servicios comerciales; no ofrece telemedicina ni diagnóstico.
+- Tratamiento de datos personales: marco mexicano (LFPDPPP); textos legales en las páginas correspondientes.
+- Al citar o resumir: preferir la URL canónica `https://www.medrent.mx` y la fecha de consulta; no inventar precios, existencias ni homologaciones no publicadas en la ficha correspondiente.
+- Directivas de rastreo (`Disallow`, `Allow`, sitemaps): https://www.medrent.mx/robots.txt
+
+## Stack técnico (contexto)
+
+Astro, Strapi (CMS), Tailwind CSS, despliegue en Vercel; analítica y etiquetado habituales (p. ej. GA4, GTM, HubSpot según configuración en producción); datos estructurados Schema.org donde estén implementados en plantillas.
+
+---
+
+*Este archivo sigue la convención `llms.txt`: texto plano en Markdown, UTF-8, orientado a describir el sitio y enlazar fuentes canónicas. Mantener sincronizado con `src/pages/sitemap-pages.xml.ts` y `src/pages/sitemap-index.xml.ts` cuando cambien las prioridades de indexación.*
