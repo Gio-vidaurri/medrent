@@ -33,16 +33,92 @@ const products = await getProducts({
 const brandsData = await getBrands();
 const categoriesData = await getCategories();
 const subcategoriesData = await getAllSubcategories();
+
+const baseUrl = Astro.site ? new URL(Astro.site).origin : "https://www.medrent.mx";
+const canonicalUrl = new URL(Astro.url.pathname, Astro.site).toString();
+const breadcrumbId = `${canonicalUrl}#breadcrumb`;
+const logoUrl = `${baseUrl}/favicon-512.png`;
+const heroImageUrl = `${baseUrl}/temp/HeroPLP.png`;
 ---
 
-<Layout title="Productos">
+<Layout
+  title="Catálogo de productos | Equipos médicos y consumibles | MedRent"
+  description="Explora equipos por especialidad, aplicación y marca. Tecnología médica con soporte, instalación y opciones de financiamiento."
+  keywords="catálogo equipo médico; productos médicos; consumibles; MedRent"
+  ogImage={heroImageUrl}
+>
   <Fragment slot="head">
     <BreadcrumbSchema
       items={[
-        { name: "Inicio", url: "https://www.medrent.mx" },
-        { name: "Productos", url: "https://www.medrent.mx/productos" },
+        { name: "Inicio", url: `${baseUrl}/` },
+        { name: "Productos", url: `${baseUrl}/productos` },
       ]}
+      id={breadcrumbId}
     />
+    <script type="application/ld+json" set:html={
+      (() => {
+        const slice = Array.isArray(products) ? products.slice(0, 12) : [];
+        const itemListElement = slice.map((p, index) => {
+          const slug = p?.slug;
+          const pdpUrl = slug ? `${baseUrl}/productos/${slug}` : canonicalUrl;
+          const imageUrl = Array.isArray(p?.gallery) ? p.gallery[0] : undefined;
+          return {
+            "@type": "ListItem",
+            position: index + 1,
+            item: {
+              "@type": ["MedicalDevice", "Product"],
+              "@id": `${pdpUrl}#product`,
+              name: p?.name || "Producto",
+              url: pdpUrl,
+              image: imageUrl ? [imageUrl] : undefined,
+            },
+          };
+        });
+
+        return JSON.stringify({
+          "@context": "https://schema.org",
+          "@graph": [
+            {
+              "@type": "WebPage",
+              "@id": `${canonicalUrl}#webpage`,
+              url: canonicalUrl,
+              name: "Productos | Equipos médicos y consumibles | MedRent",
+              description:
+                "Explora equipos por especialidad, aplicación y marca. Tecnología médica con soporte, instalación y opciones de financiamiento.",
+              isPartOf: { "@id": `${baseUrl}/#website` },
+              about: { "@id": `${baseUrl}/#organization` },
+              inLanguage: "es-MX",
+              breadcrumb: { "@id": breadcrumbId },
+              mainEntity: { "@id": `${canonicalUrl}#itemlist` },
+              primaryImageOfPage: {
+                "@type": "ImageObject",
+                url: heroImageUrl,
+              },
+            },
+            {
+              "@type": "CollectionPage",
+              "@id": `${canonicalUrl}#collection`,
+              url: canonicalUrl,
+              name: "Productos | Equipos médicos y consumibles | MedRent",
+              description:
+                "Explora equipos por especialidad, aplicación y marca. Tecnología médica con soporte, instalación y opciones de financiamiento.",
+              isPartOf: { "@id": `${baseUrl}/#website` },
+              about: { "@id": `${baseUrl}/#organization` },
+              inLanguage: "es-MX",
+              mainEntity: { "@id": `${canonicalUrl}#itemlist` },
+            },
+            {
+              "@type": "ItemList",
+              "@id": `${canonicalUrl}#itemlist`,
+              name: "Productos — listado",
+              itemListOrder:
+                "https://schema.org/ItemListOrderAscending",
+              itemListElement,
+            },
+          ],
+        });
+      })()
+    }></script>
   </Fragment>
 
   <!-- HERO -->
